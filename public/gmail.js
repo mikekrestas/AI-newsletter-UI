@@ -1,4 +1,4 @@
-import { newsletterName } from './sources.js?v=6';
+import { newsletterName } from './sources.js?v=7';
 export const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export class GmailError extends Error { constructor(message, status) { super(message); this.status = status; } }
 export class Gmail {

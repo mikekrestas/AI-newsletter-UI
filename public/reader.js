@@ -154,14 +154,31 @@ export function readableContent(body, html = true) {
 export function extractArticles(body) {
   const fragment = readableContent(body.content, body.html);
   const articles = [], urls = new Set();
+  const promotional = /^(?:unsubscribe|manage (?:your )?preferences|subscribe|privacy policy|share(?: this)?$|follow us|view (?:this )?(?:email )?in|read online$|linkedin$|twitter$|facebook$|instagram$|youtube$)|\(sponsor\)|\bsponsored\b|want to advertise|referral link/i;
+  function add(title, link) {
+    const url = link && articleUrl(link.href);
+    title = title.replace(/\s+/g, ' ').trim();
+    if (!url || urls.has(url) || title.length < 8 || promotional.test(title) || articles.length >= 60) return;
+    urls.add(url); articles.push({ title: title.slice(0, 300), url });
+  }
   for (const story of fragment.querySelectorAll('.newsletter-story')) {
     const heading = story.querySelector('.newsletter-heading');
-    if (!heading || /\(sponsor\)|want to advertise|tell your friends/i.test(heading.textContent)) continue;
-    const link = heading.querySelector('a[href]') || [...story.querySelectorAll('a[href]')].find(a => !/unsubscribe|preferences|share|subscribe|privacy/i.test(a.textContent));
-    const url = link && articleUrl(link.href), title = heading.textContent.replace(/\s+/g, ' ').trim();
-    if (!url || urls.has(url) || !title) continue;
-    urls.add(url); articles.push({ title: title.slice(0, 300), url });
-    if (articles.length === 60) break;
+    if (!heading || promotional.test(heading.textContent)) continue;
+    const link = heading.querySelector('a[href]') || [...story.querySelectorAll('a[href]')].find(a => !promotional.test(a.textContent));
+    add(heading.textContent, link);
+  }
+  // Some providers use linked prose or plain-text editions rather than HTML
+  // headings. Preserve those article links too, without importing footer links.
+  for (const link of fragment.querySelectorAll('a[href]')) {
+    if (link.closest('.newsletter-outro, .newsletter-masthead') || promotional.test(link.textContent)) continue;
+    const heading = link.closest('.newsletter-story')?.querySelector('.newsletter-heading');
+    if (heading && promotional.test(heading.textContent)) continue;
+    let title = link.textContent.trim();
+    if (/^(?:https?:\/\/|read (?:more|the (?:full )?(?:article|story))$|learn more$|here$)/i.test(title)) {
+      const paragraph = link.closest('p, li');
+      title = paragraph?.textContent.replace(/https?:\/\/\S+/g, '').trim() || '';
+    }
+    add(title, link);
   }
   return articles;
 }

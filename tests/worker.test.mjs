@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import worker from '../worker.mjs';
 import { dayRange, localDay } from '../public/dates.js';
-import { chunks, MODEL, generateSummary, buildReferences } from '../summary.mjs';
+import { chunks, MODEL, generateSummary, buildReferences, validateHighlights, SUMMARY_VERSION } from '../summary.mjs';
 import { newsletterName, newsletterTone } from '../public/sources.js';
 
 const base = 'https://signal.example';
@@ -14,7 +14,7 @@ function fixture() {
     OWNER_EMAIL: 'michaelkrestas1@gmail.com', GOOGLE_CLIENT_ID: 'test.apps.googleusercontent.com', NEWSLETTER_LABEL: 'AI Newsletters',
     ASSETS: { fetch: async () => new Response('static app') },
     REPORTS: { get: async key => data.has(key) ? JSON.parse(data.get(key)) : null, put: async (key, value, options) => { data.set(key, value); writes.push({ value, options }); } },
-    AI: { run: async (model, input) => { assert.equal(model, MODEL); inputs.push(input); return { response: input.messages[0].content.includes('4–6') ? '* [Model](A1) launches.\n* Research and tools expand.' : 'Notes on models (A1), research and developer tools (E1).' }; } }
+    AI: { run: async (model, input) => { assert.equal(model, MODEL); inputs.push(input); return { response: input.messages[0].content.includes('JSON object') ? JSON.stringify({ highlights: [{ headline: 'Model launches a developer API', detail: 'Developers can now test the new model through an API.', reference: 'A1' }] }) : 'Notes on models (A1), research and developer tools (E1).' }; } }
   };
   return { env, data, inputs, writes };
 }
@@ -38,7 +38,8 @@ try {
     const first = (await response.json()).report;
     assert.equal(first.cached, false); assert.equal(first.sources.length, 1);
     assert.equal(first.references.find(ref => ref.key === 'A1').url, 'https://example.com/model');
-    assert.match(first.summary, /\[Model\]\(A1\)/);
+    assert.equal(first.editorialVersion, SUMMARY_VERSION); assert.equal(first.highlights[0].reference, 'A1');
+    assert.match(first.summary, /\[Model launches a developer API\]\(A1\)/);
     const input = f.inputs.map(input => input.messages[1].content).join('\n');
     assert.match(input, /ARTICLE_ALPHA/); assert.match(input, /ARTICLE_OMEGA/);
     assert.match(input, /A1: Model release/); assert.doesNotMatch(input, /https:\/\/example.com\/model/);
@@ -119,7 +120,7 @@ try {
     assert.equal((await response.json()).report.references.filter(ref => ref.type === 'article').length, 300);
     for (const input of f.inputs) assert.ok(input.messages[1].content.length < 16000);
     const final = f.inputs.at(-1).messages[1].content;
-    assert.match(final, /A1:/); assert.doesNotMatch(final, /A300:/);
+    assert.match(final, /A1:/); assert.match(final, /A300:/);
   });
   await test('long editions get a balanced provider budget and a one-provider draft gets reviewed', async () => {
     const sources = [
@@ -130,24 +131,61 @@ try {
     const inputs = []; let finalCount = 0;
     const ai = { run: async (model, input) => {
       inputs.push(input); const system = input.messages[0].content, content = input.messages[1].content;
-      if (system.includes('4–6')) {
+      if (system.includes('JSON object')) {
         finalCount++;
         assert.match(content, /Provider: TLDR AI/); assert.match(content, /Provider: AlphaSignal/); assert.match(content, /Provider: DAIR.AI/);
         assert.match(content, /ALPHA_UNIQUE/); assert.match(content, /DAIR_UNIQUE/);
-        return { response: finalCount === 1 ? '* [Model](A1) launches.\n* More [model news](A1).' : '* [Model](A1) launches.\n* [Research](A2) improves efficiency.\n* [Dataset](A3) enables evaluation.' };
+        return { response: JSON.stringify({ highlights: finalCount === 1 ? [{ headline: 'Model launches a developer API', detail: 'Developers can now test the new model through an API.', reference: 'A1' }] : [
+          { headline: 'Model launches a developer API', detail: 'Developers can now test the new model through an API.', reference: 'A1' },
+          { headline: 'Research improves inference efficiency', detail: 'The new research reports reproducible gains in inference efficiency.', reference: 'A2' },
+          { headline: 'Open dataset improves AI evaluation', detail: 'Researchers can now use the new dataset to evaluate model behaviour.', reference: 'A3' }
+        ] }) };
       }
       if (system.includes('ONE provider')) return { response: 'A model launches (A1). This is the consolidated TLDR candidate.' };
       if (content.includes('ALPHA_UNIQUE')) return { response: 'ALPHA_UNIQUE: Independently useful research evidence (A2, E2).' };
       if (content.includes('DAIR_UNIQUE')) return { response: 'DAIR_UNIQUE: A concrete new evaluation capability (A3, E3).' };
       return { response: 'Model news (A1). '.repeat(60) };
     } };
-    const summary = await generateSummary(sources, ai, undefined, buildReferences(sources));
-    assert.equal(finalCount, 2); assert.match(summary, /\(A2\)/); assert.match(summary, /\(A3\)/);
-    const final = inputs.filter(input => input.messages[0].content.includes('4–6'))[0];
+    const report = await generateSummary(sources, ai, undefined, buildReferences(sources));
+    assert.equal(finalCount, 2); assert.match(report.summary, /\(A2\)/); assert.match(report.summary, /\(A3\)/);
+    const final = inputs.filter(input => input.messages[0].content.includes('JSON object'))[0];
     assert.ok(final.messages[1].content.length < 6000);
     assert.match(final.messages[0].content, /credible research evidence/);
     assert.match(inputs.at(-1).messages[0].content, /EDITORIAL REVIEW/);
     assert.ok(inputs.some(input => input.messages[0].content.includes('ONE provider')));
+  });
+  await test('editorial validation rejects fragments, duplicate story details and missing article links', () => {
+    const references = buildReferences([source]);
+    const story = { headline: 'OpenAI publishes maths manuscripts', detail: 'The manuscripts describe results from an unreleased internal model, rather than a publicly available product.', reference: 'A1' };
+    assert.equal(validateHighlights(JSON.stringify({ highlights: [story] }), references).length, 1);
+    for (const highlights of [
+      [{ ...story, detail: 'The model was given 4,000 problems to attempt, with each result using about 3 hours of' }],
+      [story, { ...story, headline: 'The model attempts 4,000 maths problems' }],
+      [{ ...story, reference: 'E1' }], [{ ...story, reference: 'A999' }], [{ ...story, reference: 'https://invented.invalid/article' }],
+      [{ ...story, detail: 'Evaluator answer: A2 supports this interesting result.' }]
+    ]) assert.throws(() => validateHighlights(JSON.stringify({ highlights }), references));
+    assert.equal(validateHighlights(JSON.stringify({ highlights: [{ ...story, detail: story.detail + ' (E1)' }] }), references)[0].detail, story.detail);
+    assert.deepEqual(validateHighlights('{"highlights":[]}', references), []);
+  });
+  await test('fragmented AI draft gets one repair; invalid repair is never cached; quiet days do not get filler', async () => {
+    const mathsSource = { ...source, text: 'OpenAI released 722 maths manuscripts from an unreleased internal model onto GitHub. The model attempted 4,000 problems; its test workload is supporting context for the same release.', articles: [{ title: 'OpenAI maths manuscripts', url: 'https://example.com/maths' }] };
+    const f = fixture(); const regular = f.env.AI.run; let finalCalls = 0;
+    f.env.AI.run = async (model, input) => {
+      if (!input.messages[0].content.includes('JSON object')) return regular(model, input);
+      finalCalls++;
+      if (finalCalls === 1) return { response: JSON.stringify({ highlights: [{ headline: 'OpenAI publishes maths manuscripts', detail: 'The model was given 4,000 problems to attempt, with each result using about 3 hours of', reference: 'A1' }] }) };
+      assert.match(input.messages[0].content, /complete sentence/); assert.match(input.messages[0].content, /supporting context, NOT a separate news item/);
+      return { response: JSON.stringify({ highlights: [{ headline: 'OpenAI publishes maths manuscripts', detail: 'The release contains results from an unreleased internal model, alongside details of its test workload.', reference: 'A1' }] }) };
+    };
+    const result = await worker.fetch(request('POST', { date, sources: [mathsSource] }), f.env); assert.equal(result.status, 200);
+    const report = (await result.json()).report; assert.equal(finalCalls, 2); assert.equal(report.highlights.length, 1); assert.equal(f.writes.length, 1);
+    assert.doesNotMatch(report.highlights[0].detail, /\b[AE]\d+\b/);
+    const invalid = fixture(); invalid.env.AI.run = async () => ({ response: '* An uncited free-form evaluator answer.' });
+    assert.equal((await worker.fetch(request(), invalid.env)).status, 422); assert.equal(invalid.writes.length, 0);
+    const quiet = fixture(); const extraction = quiet.env.AI.run;
+    quiet.env.AI.run = async (model, input) => input.messages[0].content.includes('JSON object') ? { response: '{"highlights":[]}' } : extraction(model, input);
+    const none = (await (await worker.fetch(request('POST', { date, sources: [{ ...source, text: 'Only routine tutorials today.', articles: [] }] }), quiet.env)).json()).report;
+    assert.deepEqual(none.highlights, []); assert.equal(none.summary, ''); assert.equal(none.unlinkedEditionCount, 1);
   });
   await test('LinkedIn newsletter sender variants keep their canonical provider and colour', () => {
     const name = newsletterName('"DAIR.AI via LinkedIn" <newsletters-noreply@linkedin.com>');

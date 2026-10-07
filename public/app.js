@@ -1,15 +1,15 @@
-import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=6';
-import { readableContent, decodeEntities, extractArticles } from './reader.js?v=6';
-import { newsletterName, newsletterTone } from './sources.js?v=6';
-import { renderReport } from './report.js?v=6';
-import { demoEditions } from './demo.js?v=6';
-import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata } from './brief.js?v=6';
-import { showBriefProgress, stopBriefProgress } from './progress.js?v=6';
+import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=7';
+import { readableContent, decodeEntities, extractArticles } from './reader.js?v=7';
+import { newsletterName, newsletterTone } from './sources.js?v=7';
+import { renderReport, EDITORIAL_VERSION } from './report.js?v=7';
+import { demoEditions } from './demo.js?v=7';
+import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata } from './brief.js?v=7';
+import { showBriefProgress, stopBriefProgress } from './progress.js?v=7';
 const $ = id => document.getElementById(id);
 const sevenDays = 7 * 86400000;
 let view = 'catchup', mode = 'welcome', account = '', editions = [], progress = {}, gmail = null, labelId = '', nextPage = null, busy = false, generation = 0, readerRequest = 0, expiresAt = 0;
 let settings = readStorage('signal:settings', { clientId: '', label: 'AI Newsletters' });
-let briefController = null, briefBusy = false;
+let briefController = null, briefBusy = false, briefNeedsUpdate = false;
 let hosted = false, persistentAuth = false, savedBriefController = null;
 let selectedSources = new Set();
 function readStorage(key, fallback) { try { const value = JSON.parse(localStorage.getItem(key)); return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback; } catch { return fallback; } }
@@ -106,7 +106,7 @@ function render() {
   $('load-more').hidden = isBrief || !gmail || !nextPage || !current; $('load-more').disabled = busy;
   $('load-more').textContent = view === 'catchup' ? 'Load more newsletters' : 'Load older editions';
   $('generate-brief').disabled = briefBusy || busy || !current;
-  $('generate-brief').textContent = briefBusy ? 'Generating…' : 'Generate daily brief';
+  $('generate-brief').textContent = briefBusy ? 'Generating…' : briefNeedsUpdate ? 'Regenerate daily brief' : 'Generate daily brief';
   $('cancel-brief').hidden = !briefBusy;
   $('brief-date').disabled = briefBusy;
   $('brief-panel').setAttribute('aria-busy', String(briefBusy));
@@ -301,6 +301,7 @@ readerDialog.addEventListener('click', event => { if (outsideReader(event) && ev
 
 $('brief-date').value = localDay();
 function clearBrief() {
+  briefNeedsUpdate = false; $('brief-update-note').hidden = true;
   savedBriefController?.abort(); savedBriefController = null;
   $('brief-result').hidden = true; $('brief-text').replaceChildren(); $('brief-source-list').replaceChildren();
   $('brief-day-sources').hidden = true;
@@ -334,14 +335,19 @@ function showDayCoverage(editions, report) {
   return missing;
 }
 function showReport(report, demo = false) {
+  briefNeedsUpdate = !demo && report.editorialVersion !== EDITORIAL_VERSION;
+  $('brief-update-note').textContent = briefNeedsUpdate ? 'This saved brief uses the previous summariser. Regenerate it for complete stories, stronger selection and direct article links.' : report.unlinkedEditionCount ? `${report.unlinkedEditionCount} ${report.unlinkedEditionCount === 1 ? 'edition did' : 'editions did'} not supply article links. Their news cannot appear as linked highlights; you can read those emails in Source editions.` : '';
+  $('brief-update-note').hidden = !$('brief-update-note').textContent;
   $('brief-text').replaceChildren(renderReport(report, openEdition));
-  document.querySelector('.brief-link-hint').hidden = !$('brief-text').querySelector('a, .inline-source');
+  document.querySelector('.brief-link-hint').hidden = !$('brief-text').querySelector('a');
   const dateLabel = new Date(dayRange(report.date).start).toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long', year: 'numeric' });
   const sources = report.sources;
   $('brief-coverage').textContent = `${dateLabel} · ${sources.length} ${sources.length === 1 ? 'newsletter' : 'newsletters'} processed · ${new Set(sources.map(source => source.source)).size} sources${demo ? ' · fictional demo' : ''}`;
   $('brief-source-list').replaceChildren(...sources.map(source => makeButton(`${source.source} — ${source.subject}`, 'brief-source-button', () => openEdition(source))));
   $('brief-sources').querySelector('summary').textContent = `Source editions (${sources.length} processed)`;
+  $('brief-sources').open = false;
   $('brief-result').hidden = false;
+  if (!briefBusy) $('generate-brief').textContent = briefNeedsUpdate ? 'Regenerate daily brief' : 'Generate daily brief';
 }
 async function loadSavedBrief() {
   if (!gmail || !hosted || briefBusy) return;
@@ -396,9 +402,13 @@ $('generate-brief').addEventListener('click', async () => {
     if (!sources.length) { $('brief-progress-panel').hidden = true; update('No newsletters were received on this date. Choose another day.'); return; }
     stage({ stage: 'evaluating', message: 'Summarising all newsletter sections and merging the day’s news…' });
     const report = demo ? {
-      date, sources,
-      references: sources.map((source, index) => ({ key: 'E' + (index + 1), type: 'edition', editionId: source.id, title: source.subject, source: source.source })),
-      summary: `* [AI model releases](E1) focus on coding and practical reasoning.\n* Research explores more efficient inference and stronger evaluations.\n* New developer tools help teams build and test AI applications.\n* This is a fictional sample brief. Connect Gmail for a report of your own newsletters.`
+      date, sources, editorialVersion: EDITORIAL_VERSION,
+      references: ['model-release', 'developer-tools', 'research'].map((path, index) => ({ key: 'A' + (index + 1), type: 'article', url: 'https://example.com/' + path, title: path.replaceAll('-', ' '), source: 'Fictional demo' })),
+      highlights: [
+        { headline: 'A new model focuses on practical coding', detail: 'This fictional highlight demonstrates a complete news story with a direct article link.', reference: 'A1' },
+        { headline: 'Developer tools simplify testing AI applications', detail: 'The entire highlight opens its example source, so there is no need to search through email editions.', reference: 'A2' },
+        { headline: 'Research explores more efficient inference', detail: 'This is illustrative content, not current AI news. Connect Gmail for your own daily brief.', reference: 'A3' }
+      ]
     } : await api.hostedBrief(date, sources, controller.signal, stage);
     controller.signal.throwIfAborted();
     if (session !== generation) return;
@@ -406,6 +416,7 @@ $('generate-brief').addEventListener('click', async () => {
     showDayCoverage(sources, report);
     stage({ stage: 'complete', message: 'The report is complete.' });
     update(demo ? 'Fictional sample brief. No AI request was made.' : report.cached ? 'No new emails: your saved brief is up to date. No additional AI request was needed.' : 'Brief ready and saved for your other devices. Generating does not mark your newsletters read.');
+    if (view === 'brief') $('brief-result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
   } catch (error) {
     if (briefController === controller) stopBriefProgress(controller.signal.aborted ? 'Cancelled' : 'Generation stopped');
     update(controller.signal.aborted ? 'Report cancelled. No partial brief was saved.' : error.message, !controller.signal.aborted);

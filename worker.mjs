@@ -71,7 +71,7 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (url.pathname === '/api/config' && request.method === 'GET') return json({
-        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.6', persistentAuth: sessionConfigured(env)
+        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.7', persistentAuth: sessionConfigured(env)
       });
       if (url.pathname.startsWith('/api/auth/')) return authRoute(request, env);
       if (url.pathname.startsWith('/api/gmail/')) return gmailRoute(request, env);
@@ -90,10 +90,10 @@ export default {
       const references = buildReferences(sources);
       const finish = async (signal, onProgress = () => {}) => {
         if (stored?.fingerprint === fingerprint) return { ...stored, cached: true };
-        const summary = await generateSummary(sources, env.AI, signal, references, onProgress);
+        const content = await generateSummary(sources, env.AI, signal, references, onProgress);
         signal.throwIfAborted();
         onProgress({ stage: 'reporting', message: 'Saving the finished brief for your other devices…' });
-        const report = { date, summary, references, fingerprint, generatedAt: new Date().toISOString(), sources: sources.map(({ text, articles, ...metadata }) => metadata) };
+        const report = { date, ...content, references, fingerprint, generatedAt: new Date().toISOString(), sources: sources.map(({ text, articles, ...metadata }) => metadata) };
         await env.REPORTS.put(key, JSON.stringify(report), { expirationTtl: 30 * 86400 });
         return { ...report, cached: false };
       };
