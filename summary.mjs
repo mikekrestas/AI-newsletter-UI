@@ -37,7 +37,7 @@ function citedProviders(summary, references) {
   const keys = new Set([...summary.matchAll(/\[[^\]\n]+\]\(([AE]\d+)\)/g)].map(match => match[1]));
   return new Set(references.filter(ref => keys.has(ref.key)).map(ref => ref.source));
 }
-export async function generateSummary(sources, ai, signal, references = buildReferences(sources)) {
+export async function generateSummary(sources, ai, signal, references = buildReferences(sources), onProgress = () => {}) {
   const providers = new Map();
   let sectionCount = 0;
   for (const source of sources) {
@@ -67,12 +67,18 @@ export async function generateSummary(sources, ai, signal, references = buildRef
   const candidateInstruction = ' Extract compact factual candidates covering every distinct news story in this section, including stories near the end. Keep matching source keys (A1, E1, etc.) beside each candidate. Use only the supplied keys. Rank candidates by newsworthiness and state the concrete development, evidence and practical impact. At most 200 words. No introduction or commentary.';
   const compactInstruction = ` Consolidate this ONE provider's candidate notes into ranked news candidates, merging repeated coverage. Preserve source keys beside each retained fact. Retain independently important developments from every edition, including shorter editions. At most ${budget} characters. This is provider-level selection, before the cross-provider comparison. No introduction or commentary.`;
   const balanced = [];
+  let evaluated = 0;
   for (const [provider, parts] of providers) {
     let notes = [];
-    for (const part of parts) notes.push(await summarize(part, candidateInstruction));
+    for (const part of parts) {
+      onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Evaluating ${provider}… section ${evaluated + 1} of ${sectionCount}` });
+      notes.push(await summarize(part, candidateInstruction)); evaluated++;
+      onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Evaluated ${evaluated} of ${sectionCount} newsletter sections` });
+    }
     for (let pass = 0; notes.join('\n').length > budget && pass < 4; pass++) {
       const combined = notes.join('\n');
       const next = [];
+      onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Comparing and consolidating ${provider} stories…` });
       for (const part of chunks(combined)) next.push(await summarize(part, compactInstruction, Math.max(60, Math.floor(budget / 5))));
       if (next.join('\n').length >= combined.length) throw new Error('The AI could not condense this day. No partial report was created.');
       notes = next;
@@ -85,10 +91,12 @@ export async function generateSummary(sources, ai, signal, references = buildRef
   const relevant = references.filter(ref => cited.has(ref.key) || ref.type === 'edition');
   const material = `Available source references:\n${referenceList(relevant)}\n\nEqually budgeted provider candidates:\n${combined}`;
   const finalInstruction = ' Write 4–6 short bullets when there is enough meaningful news, at most 180 words total. Select the main distinct developments across the WHOLE day after comparing every provider. Include independently important unique stories from other providers when they add meaningful news; do not simply choose the first or longest newsletter. Within each bullet link a meaningful phrase to matching source reference keys using [phrase](A1) or [phrase](E1), where the key MUST exist in Available source references. Prefer an article A key; use an edition E key when no matching article is supplied. Never invent a URL or key. Keep references specific to their facts. No introduction, opinions or headings.';
+  onProgress({ stage: 'reporting', message: 'Writing the daily report and linking its sources…' });
   let summary = await summarize(material, finalInstruction, 650);
   // A lopsided first draft gets one editorial review using the same complete,
   // balanced candidates. This is not a rule to manufacture news per provider.
   if (providers.size > 1 && citedProviders(summary, references).size <= 1) {
+    onProgress({ stage: 'reporting', message: 'Reviewing the draft against the other newsletters…' });
     summary = await summarize(material + '\n\nFirst draft for review:\n' + summary, finalInstruction + ' EDITORIAL REVIEW: The first draft cites at most one provider. Re-evaluate every other provider\'s independently important candidates and replace lower-value or duplicate items where appropriate. Preserve factual accuracy; do not force a citation from a provider that contributes only adverts or duplicate news.', 650);
   }
   return summary;

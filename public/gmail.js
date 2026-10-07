@@ -1,15 +1,15 @@
-import { newsletterName } from './sources.js';
+import { newsletterName } from './sources.js?v=6';
 export const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export class GmailError extends Error { constructor(message, status) { super(message); this.status = status; } }
 export class Gmail {
-  constructor(token) { this.token = token; this.controller = new AbortController(); }
+  constructor(token, persistent = false) { this.token = token; this.persistent = persistent; this.controller = new AbortController(); }
   close() { this.controller.abort(); this.token = ''; }
   async request(path, params = {}) {
-    const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/' + path);
+    const url = new URL(this.persistent ? '/api/gmail/' + path : 'https://gmail.googleapis.com/gmail/v1/users/me/' + path, location.origin);
     for (const [key, value] of Object.entries(params)) {
       for (const item of Array.isArray(value) ? value : [value]) if (item !== undefined) url.searchParams.append(key, item);
     }
-    const response = await fetch(url, { headers: { Authorization: 'Bearer ' + this.token }, signal: this.controller.signal });
+    const response = await fetch(url, { headers: this.persistent ? {} : { Authorization: 'Bearer ' + this.token }, credentials: 'same-origin', signal: this.controller.signal });
     if (!response.ok) {
       const errors = { 401: 'Your Gmail session expired. Connect Gmail again to continue.', 403: 'Google denied Gmail access. Check that the Gmail API is enabled and read-only permission was granted.', 429: 'Gmail is rate-limiting requests. Wait a moment and try again.' };
       throw new GmailError(errors[response.status] || 'Gmail could not load this request. Please try again.', response.status);
@@ -17,13 +17,35 @@ export class Gmail {
     return response.json();
   }
   async profile() { return this.request('profile'); }
-  async hostedBrief(date, sources, signal) {
+  async hostedBrief(date, sources, signal, onProgress) {
     const response = await fetch('/api/brief' + (sources ? '' : '?date=' + encodeURIComponent(date)), {
       method: sources ? 'POST' : 'GET',
-      headers: { Authorization: 'Bearer ' + this.token, ...(sources ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { ...(this.persistent ? {} : { Authorization: 'Bearer ' + this.token }), ...(sources ? { 'Content-Type': 'application/json' } : {}), ...(onProgress ? { Accept: 'text/event-stream' } : {}) },
+      credentials: 'same-origin',
       ...(sources ? { body: JSON.stringify({ date, sources }) } : {}),
       signal: signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal
     });
+    if (response.ok && response.headers.get('Content-Type')?.includes('text/event-stream')) {
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = '', report;
+      try {
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let end;
+          while ((end = buffer.indexOf('\n\n')) !== -1) {
+            const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+            if (!event.startsWith('data: ')) continue;
+            const update = JSON.parse(event.slice(6));
+            if (update.type === 'error') throw new GmailError(update.error, update.status);
+            if (update.type === 'progress') onProgress?.(update);
+            if (update.type === 'complete') report = update.report;
+          }
+        }
+      } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+      finally { reader.releaseLock(); }
+      if (!report) throw new Error('The connection ended before the report completed. Try again.');
+      return report;
+    }
     let result;
     try { result = await response.json(); } catch { throw new Error('Hosted summaries are not available here. Open your deployed Cloudflare website to generate a report.'); }
     if (!response.ok) throw new GmailError(result.error || 'The hosted report could not be loaded.', response.status);

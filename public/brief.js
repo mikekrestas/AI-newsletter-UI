@@ -1,6 +1,6 @@
-import { readableContent, extractArticles } from './reader.js';
-import { dayRange } from './dates.js';
-export { localDay, dayRange } from './dates.js';
+import { readableContent, extractArticles } from './reader.js?v=6';
+import { dayRange } from './dates.js?v=6';
+export { localDay, dayRange } from './dates.js?v=6';
 
 export function newsletterText(body) {
   const fragment = readableContent(body.content, body.html);
@@ -57,7 +57,8 @@ export async function collectDayMetadata(api, label, date, signal, onProgress = 
   return result.sort((a, b) => a.date - b.date);
 }
 
-export async function collectDay(api, label, date, signal, onProgress = () => {}) {
+export async function collectDay(api, label, date, signal, onProgress = () => {}, onStage = () => {}) {
+  onStage({ stage: 'collecting', done: 0, total: 1, message: 'Finding every newsletter for this date…' });
   const editions = await collectDayMetadata(api, label, date, signal, onProgress);
   const result = [];
   for (let i = 0; i < editions.length; i += 3) {
@@ -71,6 +72,7 @@ export async function collectDay(api, label, date, signal, onProgress = () => {}
     }));
     result.push(...group.filter(Boolean));
     onProgress(`Reading full newsletters… ${Math.min(i + 3, editions.length)} of ${editions.length}`);
+    onStage({ stage: 'collecting', done: Math.min(i + 3, editions.length), total: editions.length, message: `Collecting full emails… ${Math.min(i + 3, editions.length)} of ${editions.length}` });
   }
   signal.throwIfAborted();
   return result.sort((a, b) => a.date - b.date);

@@ -1,4 +1,4 @@
-import { safeUrl } from './reader.js';
+import { safeUrl } from './reader.js?v=6';
 
 function reportItems(summary) {
   const lines = String(summary || '').replace(/\r\n?/g, '\n').split('\n');

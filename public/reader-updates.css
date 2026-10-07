@@ -43,6 +43,27 @@ select:focus-visible { outline: 3px solid #558227; outline-offset: 3px; }
 .newsletter-group .edition-side { position: absolute; top: 14px; right: 20px; }
 .newsletter-group .edition-title { margin-top: 6px; }
 .edition { box-shadow: 0 2px 8px #202a4403; }
+.edition { position: relative; cursor: pointer; }
+.edition:hover { border-color: #b9c7da; box-shadow: 0 4px 16px #202a4409; }
+.edition-title::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 12px; }
+.edition-side, .edition-actions { position: relative; z-index: 2; }
+.edition-side, .edition-actions { pointer-events: none; }
+.edition-side button, .edition-actions button { pointer-events: auto; }
+.edition:has(.edition-title:focus-visible) { outline: 3px solid #558227; outline-offset: 3px; }
+.reading-footer > span:last-child { display: block; white-space: nowrap; flex-shrink: 0; }
+.brief-progress { margin: 22px 0 12px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.brief-progress progress { width: 100%; height: 8px; border: 0; border-radius: 8px; overflow: hidden; accent-color: var(--green); }
+.brief-progress progress::-webkit-progress-bar { background: #e2e8dc; border-radius: 8px; }
+.brief-progress progress::-webkit-progress-value { background: var(--green); border-radius: 8px; transition: width .2s; }
+.brief-progress progress::-moz-progress-bar { background: var(--green); }
+.brief-stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 12px 0 0; list-style: none; }
+.brief-stages li { font-size: 12px; color: var(--muted); }
+.brief-stages .is-active, .brief-stages .is-complete { color: var(--green); font-weight: 650; }
+.brief-progress.is-stopped progress { accent-color: #994731; }
+.brief-progress.is-stopped progress::-webkit-progress-value { background: #994731; }
+.brief-progress.is-stopped progress::-moz-progress-bar { background: #994731; }
+@media (prefers-reduced-motion: reduce) { .brief-progress progress::-webkit-progress-value { transition: none; } }
+@media (max-width: 400px) { .brief-progress { padding: 14px 12px; } .brief-stages li { font-size: 10px; } }
 .edition-actions .text-button { min-height: 36px; }
 #clear-filters { margin-top: 20px; }
 body.reader-open { overflow: hidden; }
