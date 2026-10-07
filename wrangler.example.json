@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "signal-ai-newsletters",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-07",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "ai": { "binding": "AI" },
+  "kv_namespaces": [{ "binding": "REPORTS", "id": "00000000000000000000000000000000" }],
+  "vars": {
+    "OWNER_EMAIL": "michaelkrestas1@gmail.com",
+    "GOOGLE_CLIENT_ID": "",
+    "NEWSLETTER_LABEL": "AI Newsletters"
+  },
+  "observability": { "enabled": false }
+}

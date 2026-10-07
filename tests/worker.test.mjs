@@ -1,0 +1,158 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import worker from '../worker.mjs';
+import { dayRange, localDay } from '../public/dates.js';
+import { chunks, MODEL, generateSummary, buildReferences } from '../summary.mjs';
+import { newsletterName, newsletterTone } from '../public/sources.js';
+
+const base = 'https://signal.example';
+const date = '2026-10-07';
+const source = { id: 'abc123', threadId: 'thread1', source: 'TLDR AI', subject: 'Today’s news', date: dayRange(date).start + 3600000, text: 'ARTICLE_ALPHA: A model release.\n' + 'Research findings and new developer tools. '.repeat(300) + '\nARTICLE_OMEGA: The last distinct story.', articles: [{ title: 'Model release', url: 'https://example.com/model' }] };
+function fixture() {
+  const data = new Map(), inputs = [], writes = [];
+  const env = {
+    OWNER_EMAIL: 'michaelkrestas1@gmail.com', GOOGLE_CLIENT_ID: 'test.apps.googleusercontent.com', NEWSLETTER_LABEL: 'AI Newsletters',
+    ASSETS: { fetch: async () => new Response('static app') },
+    REPORTS: { get: async key => data.has(key) ? JSON.parse(data.get(key)) : null, put: async (key, value, options) => { data.set(key, value); writes.push({ value, options }); } },
+    AI: { run: async (model, input) => { assert.equal(model, MODEL); inputs.push(input); return { response: input.messages[0].content.includes('4–6') ? '* [Model](A1) launches.\n* Research and tools expand.' : 'Notes on models (A1), research and developer tools (E1).' }; } }
+  };
+  return { env, data, inputs, writes };
+}
+function request(method = 'POST', body = { date, sources: [source] }, extra = {}) {
+  return new Request(base + '/api/brief' + (method === 'GET' ? '?date=' + date : ''), { method, headers: { Authorization: 'Bearer test-gmail-token', ...(method === 'POST' ? { 'Content-Type': 'application/json', Origin: base } : {}), ...extra.headers }, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}), ...(extra.signal ? { signal: extra.signal } : {}) });
+}
+const originalFetch = globalThis.fetch;
+let profile = 'michaelkrestas1@gmail.com', profileStatus = 200;
+globalThis.fetch = async (url, options) => {
+  assert.equal(url, 'https://gmail.googleapis.com/gmail/v1/users/me/profile');
+  assert.equal(options.headers.Authorization, 'Bearer test-gmail-token');
+  return Response.json({ emailAddress: profile }, { status: profileStatus });
+};
+try {
+  await test('owner verification, complete input processing, private cache and changed-day regeneration', async () => {
+    const f = fixture();
+    const response = await worker.fetch(request(), f.env);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(response.headers.has('Access-Control-Allow-Origin'), false);
+    const first = (await response.json()).report;
+    assert.equal(first.cached, false); assert.equal(first.sources.length, 1);
+    assert.equal(first.references.find(ref => ref.key === 'A1').url, 'https://example.com/model');
+    assert.match(first.summary, /\[Model\]\(A1\)/);
+    const input = f.inputs.map(input => input.messages[1].content).join('\n');
+    assert.match(input, /ARTICLE_ALPHA/); assert.match(input, /ARTICLE_OMEGA/);
+    assert.match(input, /A1: Model release/); assert.doesNotMatch(input, /https:\/\/example.com\/model/);
+    assert.ok(f.inputs.length > 2, 'Long body was not processed in full sections');
+    assert.equal(f.writes[0].options.expirationTtl, 30 * 86400);
+    assert.doesNotMatch(f.writes[0].value, /test-gmail-token|ARTICLE_ALPHA|ARTICLE_OMEGA/);
+    assert.equal(Object.hasOwn(first.sources[0], 'text'), false);
+    assert.equal(Object.hasOwn(first.sources[0], 'articles'), false);
+    const calls = f.inputs.length;
+    const cached = (await (await worker.fetch(request(), f.env)).json()).report;
+    assert.equal(cached.cached, true); assert.equal(f.inputs.length, calls);
+    const onPhone = (await (await worker.fetch(request('GET'), f.env)).json()).report;
+    assert.equal(onPhone.summary, first.summary); assert.equal(f.inputs.length, calls);
+    await worker.fetch(request('POST', { date, sources: [{ ...source, text: source.text + '\nNEW_ARRIVAL' }] }), f.env);
+    assert.ok(f.inputs.length > calls); assert.equal(f.writes.length, 2);
+  });
+  await test('missing auth, wrong owner, expired token and other website origin cannot use AI/cache', async () => {
+    const f = fixture();
+    assert.equal((await worker.fetch(request('GET', null, { headers: { Authorization: '' } }), f.env)).status, 401);
+    profile = 'attacker@example.com'; assert.equal((await worker.fetch(request(), f.env)).status, 403);
+    profile = 'michaelkrestas1@gmail.com'; profileStatus = 401; assert.equal((await worker.fetch(request(), f.env)).status, 401);
+    profileStatus = 200;
+    assert.equal((await worker.fetch(request('POST', undefined, { headers: { Origin: 'https://other.example' } }), f.env)).status, 403);
+    assert.equal(f.inputs.length, 0); assert.equal(f.writes.length, 0);
+  });
+  await test('invalid dates, duplicate or out-of-day sources, large requests and unsupported routes stop safely', async () => {
+    const f = fixture();
+    for (const body of [{ date: '2026-02-30', sources: [source] }, { date, sources: [source, source] }, { date, sources: [{ ...source, date: dayRange(date).end }] }]) assert.equal((await worker.fetch(request('POST', body), f.env)).status, 400);
+    for (const url of ['javascript:alert(1)', 'data:text/html,attack', 'not a URL']) assert.equal((await worker.fetch(request('POST', { date, sources: [{ ...source, articles: [{ title: 'Unsafe', url }] }] }), f.env)).status, 400);
+    const oversized = request('POST', { date, sources: [{ ...source, text: 'a'.repeat(520000) }] });
+    assert.equal((await worker.fetch(oversized, f.env)).status, 413);
+    assert.equal((await worker.fetch(request('POST', { date, sources: [{ ...source, text: 'a'.repeat(150000) }] }), f.env)).status, 422);
+    assert.equal((await worker.fetch(new Request(base + '/api/unknown'), f.env)).status, 404);
+    assert.equal((await worker.fetch(new Request(base + '/api/brief', { method: 'OPTIONS' }), f.env)).status, 405);
+    assert.equal(f.inputs.length, 0); assert.equal(f.writes.length, 0);
+  });
+  await test('AI errors, free quota exhaustion and cancellation never save partial reports', async () => {
+    const f = fixture();
+    f.env.AI.run = async () => { throw new Error('daily neurons quota exceeded'); };
+    assert.equal((await worker.fetch(request(), f.env)).status, 429);
+    f.env.AI.run = async () => ({ response: '' });
+    assert.equal((await worker.fetch(request(), f.env)).status, 422);
+    const controller = new AbortController();
+    f.env.AI.run = async () => { controller.abort(); return { response: 'Incomplete notes' }; };
+    assert.equal((await worker.fetch(request('POST', undefined, { signal: controller.signal }), f.env)).status, 499);
+    assert.equal(f.writes.length, 0);
+  });
+  await test('public configuration contains no owner identity or token; assets and empty cache work', async () => {
+    const f = fixture();
+    const config = await (await worker.fetch(new Request(base + '/api/config'), f.env)).json();
+    assert.equal(config.clientId, f.env.GOOGLE_CLIENT_ID); assert.equal(config.hosted, true);
+    assert.doesNotMatch(JSON.stringify(config), /michaelkrestas1|token/);
+    assert.equal(await (await worker.fetch(new Request(base + '/'), f.env)).text(), 'static app');
+    assert.equal((await (await worker.fetch(request('GET'), f.env)).json()).report, null);
+  });
+  await test('London day boundaries stay stable across travel and daylight saving; chunks retain tail', () => {
+    assert.equal(localDay(new Date('2026-10-06T23:10:00Z')), date);
+    assert.equal((dayRange('2026-03-29').end - dayRange('2026-03-29').start) / 3600000, 23);
+    assert.equal((dayRange('2026-10-25').end - dayRange('2026-10-25').start) / 3600000, 25);
+    const text = 'A '.repeat(8000) + 'END_MARKER'; assert.equal(chunks(text).join(''), text);
+  });
+  await test('saved reports from Signal 1.3 stay readable but regenerate with citations on demand', async () => {
+    const f = fixture();
+    await worker.fetch(request(), f.env);
+    const key = [...f.data.keys()][0]; assert.match(key, /^signal-3:/);
+    f.data.set(key, JSON.stringify({ date, summary: '* A legacy saved report.', sources: [{ id: source.id, subject: source.subject, source: source.source, date: source.date }], fingerprint: 'legacy', generatedAt: '2026-10-07T08:00:00Z' }));
+    const calls = f.inputs.length;
+    const old = (await (await worker.fetch(request('GET'), f.env)).json()).report;
+    assert.match(old.summary, /legacy/); assert.equal(f.inputs.length, calls);
+    const updated = (await (await worker.fetch(request(), f.env)).json()).report;
+    assert.equal(updated.references[1].key, 'A1'); assert.ok(f.inputs.length > calls);
+  });
+  await test('many article references stay available without overflowing summary prompts', async () => {
+    const f = fixture();
+    const sources = Array.from({ length: 5 }, (_, i) => ({ ...source, id: 'edition-' + i, text: 'A release with several research stories.', articles: Array.from({ length: 60 }, (_, j) => ({ title: 'Research article ' + j + ': ' + 'detailed title '.repeat(16), url: `https://example.com/news/${i}/${j}` })) }));
+    const response = await worker.fetch(request('POST', { date, sources }), f.env);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).report.references.filter(ref => ref.type === 'article').length, 300);
+    for (const input of f.inputs) assert.ok(input.messages[1].content.length < 16000);
+    const final = f.inputs.at(-1).messages[1].content;
+    assert.match(final, /A1:/); assert.doesNotMatch(final, /A300:/);
+  });
+  await test('long editions get a balanced provider budget and a one-provider draft gets reviewed', async () => {
+    const sources = [
+      { ...source, text: 'LONG_TLDR: ' + 'model news '.repeat(1500) },
+      { ...source, id: 'alpha', source: 'AlphaSignal', text: 'ALPHA_UNIQUE: A reproducible research result.', articles: [{ title: 'Research', url: 'https://example.com/research' }] },
+      { ...source, id: 'dair', source: 'DAIR.AI', text: 'DAIR_UNIQUE: A useful open evaluation dataset.', articles: [{ title: 'Dataset', url: 'https://example.com/dataset' }] }
+    ];
+    const inputs = []; let finalCount = 0;
+    const ai = { run: async (model, input) => {
+      inputs.push(input); const system = input.messages[0].content, content = input.messages[1].content;
+      if (system.includes('4–6')) {
+        finalCount++;
+        assert.match(content, /Provider: TLDR AI/); assert.match(content, /Provider: AlphaSignal/); assert.match(content, /Provider: DAIR.AI/);
+        assert.match(content, /ALPHA_UNIQUE/); assert.match(content, /DAIR_UNIQUE/);
+        return { response: finalCount === 1 ? '* [Model](A1) launches.\n* More [model news](A1).' : '* [Model](A1) launches.\n* [Research](A2) improves efficiency.\n* [Dataset](A3) enables evaluation.' };
+      }
+      if (system.includes('ONE provider')) return { response: 'A model launches (A1). This is the consolidated TLDR candidate.' };
+      if (content.includes('ALPHA_UNIQUE')) return { response: 'ALPHA_UNIQUE: Independently useful research evidence (A2, E2).' };
+      if (content.includes('DAIR_UNIQUE')) return { response: 'DAIR_UNIQUE: A concrete new evaluation capability (A3, E3).' };
+      return { response: 'Model news (A1). '.repeat(60) };
+    } };
+    const summary = await generateSummary(sources, ai, undefined, buildReferences(sources));
+    assert.equal(finalCount, 2); assert.match(summary, /\(A2\)/); assert.match(summary, /\(A3\)/);
+    const final = inputs.filter(input => input.messages[0].content.includes('4–6'))[0];
+    assert.ok(final.messages[1].content.length < 6000);
+    assert.match(final.messages[0].content, /credible research evidence/);
+    assert.match(inputs.at(-1).messages[0].content, /EDITORIAL REVIEW/);
+    assert.ok(inputs.some(input => input.messages[0].content.includes('ONE provider')));
+  });
+  await test('LinkedIn newsletter sender variants keep their canonical provider and colour', () => {
+    const name = newsletterName('"DAIR.AI via LinkedIn" <newsletters-noreply@linkedin.com>');
+    assert.equal(name, 'DAIR.AI'); assert.equal(newsletterTone(name), 'rose');
+    assert.equal(newsletterTone('TLDR Tech'), 'blue');
+    assert.equal(newsletterTone('Research Weekly'), newsletterTone('Research Weekly'));
+  });
+} finally { globalThis.fetch = originalFetch; }

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="A calmer place to catch up with your AI newsletters. A personal, free Gmail reader.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://gmail.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; style-src 'self' https://accounts.google.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>Signal — AI newsletters</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="reader-updates.css?v=5">
+  <script type="module" src="app.js?v=5"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to newsletters</a>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Signal home"><span class="brand-icon" aria-hidden="true">s.</span>signal<span class="brand-sub">AI NEWSLETTERS</span></a>
+    <div class="header-actions"><span id="connection" class="connection">Not connected</span><button id="settings-button" class="button secondary" aria-label="Settings"><svg class="settings-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="15" cy="17" r="3" fill="white"/></svg><span>Settings</span></button><button id="connect-button" class="button primary">Connect Gmail</button></div>
+  </header>
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Reader navigation">
+      <div class="mobile-navigation"><label for="mobile-view">Reading room</label><div class="view-select"><select id="mobile-view" aria-label="Choose view"><option value="brief">Daily brief</option><option value="catchup" selected>Catch up</option><option value="saved">Saved</option><option value="archive">Archive</option></select></div></div>
+      <span class="eyebrow">YOUR READING ROOM</span>
+      <nav aria-label="Views">
+        <button class="nav-item" data-view="brief"><span>Daily brief</span></button>
+        <button class="nav-item active" data-view="catchup" aria-current="page"><span>Catch up</span><span id="catchup-count" class="count">0</span></button>
+        <button class="nav-item" data-view="saved"><span>Saved</span><span id="saved-count" class="count">0</span></button>
+        <button class="nav-item" data-view="archive"><span>Archive</span></button>
+      </nav>
+      <div class="sidebar-note"><span class="mini-line" aria-hidden="true"></span><p>You don’t have to read everything.</p><span>Save what matters. Leave the rest.</span></div>
+      <div class="sidebar-bottom"><span>Signal 1.5 · Personal reader</span><a href="setup.html" target="_blank" rel="noopener">Gmail setup guide</a></div>
+    </aside>
+    <main id="main" tabindex="-1">
+      <div class="page-title"><div><span id="view-eyebrow" class="eyebrow">A LITTLE LESS NOISE</span><h1 id="view-title">Catch up</h1><p id="view-description">Your last seven days. Older editions can wait.</p></div><button id="refresh-button" class="button secondary" disabled>Refresh</button></div>
+      <section id="welcome" class="welcome" aria-label="Getting started"><div><span class="eyebrow">START WITH YOUR INBOX</span><h2>Your newsletters, with room to breathe.</h2><p>Connect Gmail to bring your AI newsletters into one quiet reading space. Your email stays in Gmail.</p><div class="welcome-actions"><button id="welcome-connect" class="button primary">Set up Gmail</button><button id="demo-button" class="button secondary">Try a demo</button></div></div><div class="welcome-aside"><span class="large-number">01</span><p>One edition at a time.</p><span>Read · save · move on</span></div></section>
+      <div id="demo-banner" class="demo-banner" hidden><span>Demo mode · These are fictional sample editions, not current news.</span><button id="exit-demo" class="text-button">Exit demo</button></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="brief-panel" class="brief-panel" aria-label="Daily news report" hidden>
+        <div class="brief-controls">
+          <div><label for="brief-date">Report date</label><input id="brief-date" type="date" required></div>
+          <div class="brief-timezone"><span class="eyebrow">YOUR DAILY ROUNDUP</span><p>Dates use London time, even when you’re travelling.</p></div>
+        </div>
+        <p id="brief-help" class="field-help">Free daily briefs, saved for 30 days. Cloudflare processes your newsletter text. <a href="brief-setup.html" target="_blank" rel="noopener">How it works</a></p>
+        <div id="brief-day-sources" class="brief-day-sources" hidden><h3 id="brief-day-heading"></h3><div id="brief-day-provider-list" class="provider-badges"></div><p id="brief-day-note"></p></div>
+        <div class="brief-buttons"><button id="generate-brief" class="button primary">Generate daily brief</button><button id="cancel-brief" class="button secondary" hidden>Cancel</button></div>
+        <p id="brief-status" role="status" aria-live="polite">Choose a date to summarise all newsletters received that day.</p>
+        <div id="brief-result" hidden><div id="brief-coverage" class="eyebrow"></div><div class="brief-result-heading"><h2>The day’s highlights</h2><span class="brief-link-hint">Green text opens a source</span></div><div id="brief-text" class="brief-text"></div><p class="field-help">Stories are chosen for new developments, practical impact and research evidence. Repeated coverage is merged. Source editions lists every email processed.</p><details id="brief-sources"><summary>Source editions</summary><div id="brief-source-list"></div></details></div>
+      </section>
+      <section id="source-filter-panel" class="source-filter-panel" aria-label="Filter newsletters" hidden><div class="filter-heading"><span>Newsletters</span><span id="filter-summary"></span></div><div id="source-filters" class="source-filters" role="group" aria-label="Show newsletters"></div></section>
+      <div id="list-toolbar" class="list-toolbar" hidden><span id="list-summary"></span><button id="dismiss-older" class="text-button" hidden>Dismiss older editions</button></div>
+      <section id="newsletter-list" class="newsletter-list" aria-label="Newsletter editions" aria-busy="false"></section>
+      <div id="empty" class="empty" hidden><span class="empty-symbol" aria-hidden="true">✓</span><h2 id="empty-title">You’re caught up.</h2><p id="empty-description">Come back when there’s something new.</p><button id="clear-filters" class="button secondary" hidden>Show all newsletters</button></div>
+      <button id="load-more" class="button secondary load-more" hidden>Load older editions</button>
+      <footer class="reading-footer"><span id="footer-note">Progress stays in this browser. Gmail is never changed.</span><span>No endless feed.</span></footer>
+    </main>
+  </div>
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <div class="dialog-head"><h2 id="settings-title">Connect your newsletters</h2><button class="icon-button" data-close="settings-dialog" aria-label="Close settings">×</button></div>
+    <p class="dialog-intro">One-time setup using your own free Google OAuth client. Only its public client ID goes here—never a password or client secret.</p>
+    <form id="settings-form">
+      <label for="client-id">Google OAuth client ID</label><input id="client-id" autocomplete="off" placeholder="…apps.googleusercontent.com" required pattern="[A-Za-z0-9._-]+\.apps\.googleusercontent\.com">
+      <label for="gmail-label">Gmail label</label><input id="gmail-label" value="AI Newsletters" maxlength="100" required><p class="field-help">Create this label in Gmail and use filters to add your selected newsletters. Archived mail is included.</p>
+      <div class="origin-box"><span>Authorised JavaScript origin</span><code id="origin"></code></div>
+      <p class="field-help"><a href="setup.html" target="_blank" rel="noopener">Follow the setup guide</a> to enable the Gmail API, add yourself as a test user and register this origin.</p>
+      <div class="privacy-note">Read-only Gmail access lets the app read your mailbox; Google cannot restrict it to one label. Signal reads your chosen label. Access tokens are kept in memory and sent to the private backend to verify your account. Daily brief generation sends newsletter text to Cloudflare AI. Only finished reports and their source metadata are kept for 30 days. Saved/read/dismissed IDs stay in this browser.</div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="settings-dialog">Cancel</button><button type="submit" class="button primary">Save settings</button></div>
+    </form>
+  </dialog>
+  <dialog id="reader-dialog" class="reader-dialog" aria-labelledby="reader-title">
+    <div class="reader-shell">
+      <div class="reader-top"><span id="reader-source" class="eyebrow"></span><button class="icon-button" data-close="reader-dialog" aria-label="Close reader">×</button></div>
+      <div class="reader-scroll" id="reader-scroll"><h2 id="reader-title"></h2><p id="reader-date" class="reader-date"></p><div id="reader-content" class="reader-content"></div><div id="reader-actions" class="reader-actions"></div><button class="button secondary reader-bottom-close" data-close="reader-dialog">Close edition</button></div>
+    </div>
+  </dialog>
+</body>
+</html>
