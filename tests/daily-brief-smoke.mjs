@@ -56,7 +56,7 @@ try {
   await page.getByRole('button', { name: 'Connect Gmail', exact: true }).first().click();
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'michaelkrestas1@gmail.com' && document.querySelector('#refresh-button').textContent === 'Refresh');
   await page.locator('#mobile-view').selectOption('brief'); await page.locator('#brief-date').fill('2026-10-07');
-  await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
+  await page.locator('#generate-brief').click();
   await page.locator('#brief-result').waitFor({ state: 'visible' });
   await page.screenshot({ path: '/tmp/signal-v14-mobile-brief.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -71,6 +71,8 @@ try {
   assert.equal(await page.locator('#brief-text .brief-article-link').first().getAttribute('href'), 'https://example.com/alpha');
   assert.equal(await page.locator('#brief-text strong').innerText(), 'Research:');
   assert.doesNotMatch(await page.locator('#brief-text').innerText(), /^\s*\*\s/m);
+  assert.equal(await page.locator('#brief-update-note').isVisible(), true);
+  assert.equal(await page.locator('#generate-brief').textContent(), 'Regenerate daily brief');
   const input = summaryRequests[0].sources.map(source => source.text).join('\n');
   for (const marker of ['ARTICLE_ALPHA', 'ARTICLE_BETA', 'ARTICLE_OMEGA', 'ARTICLE_GAMMA']) assert.ok(input.includes(marker), `Missing ${marker}`);
   assert.doesNotMatch(input, /arrived yesterday|Inbox preview|HIDDEN_PREHEADER/);
@@ -131,17 +133,17 @@ try {
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await page.locator('#brief-day-note').getByText(/Every currently available edition/).waitFor();
   // Body failures stop before sending an incomplete report.
-  failBody = true; await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
+  failBody = true; await page.locator('#generate-brief').click();
   await page.locator('#brief-status').getByText(/could not load/).waitFor();
   assert.equal(await page.locator('#brief-result').isVisible(), false); assert.equal(summaryRequests.length, calls);
   failBody = false; delayModel = true;
-  await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
+  await page.locator('#generate-brief').click();
   await page.locator('#brief-status').getByText(/Summarising all/).waitFor();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.locator('#brief-status').getByText(/Report cancelled/).waitFor();
   assert.equal(await page.locator('#brief-result').isVisible(), false);
   delayModel = false; cloudError = 'The free AI quota was reached. Try again tomorrow.';
-  await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
+  await page.locator('#generate-brief').click();
   await page.locator('#brief-status').getByText(/free AI quota/).waitFor();
   for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1440, height: 1000 }]) {
     await page.setViewportSize(viewport);

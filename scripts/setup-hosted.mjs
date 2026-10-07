@@ -22,7 +22,7 @@ try {
   try { configText = await readFile(configFile, 'utf8'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; configText = await readFile(resolve(root, 'wrangler.example.json'), 'utf8'); }
   const config = JSON.parse(configText);
-  console.log('\nSignal 1.6 — hosted setup\n');
+  console.log('\nSignal 1.7 — hosted setup\n');
   console.log('This publishes the app, AI backend and private report cache to your Cloudflare account.');
   console.log('Keep the Workers account on the Free plan. No paid API key or PC model is needed.');
   console.log(`Only ${config.vars.OWNER_EMAIL} will be allowed to generate or read reports.\n`);

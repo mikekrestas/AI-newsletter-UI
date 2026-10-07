@@ -1,6 +1,6 @@
 # Signal — personal AI newsletter reader
 
-Signal 1.6 reads newsletters from your **AI Newsletters** Gmail label and generates a short daily AI news report. The hosted version works in a phone browser with your PC switched off.
+Signal 1.7 reads newsletters from your **AI Newsletters** Gmail label and generates a short daily AI news report. The hosted version works in a phone browser with your PC switched off.
 
 Already deployed? Follow [UPGRADE.md](UPGRADE.md) to move to Git updates while preserving your existing `wrangler.json`, Google client ID and report cache. The repository tracks `wrangler.example.json`; your active deployment configuration stays local and ignored by Git.
 
@@ -38,13 +38,17 @@ If Google rejects sign-in, check the named error on the callback page. For `inva
 
 ## Daily briefs
 
-Reports use **Europe/London** dates, including daylight saving, so travel doesn't change which emails belong to a day. Generation reads every page of emails in the selected day and the full body of each edition, including read or locally dismissed newsletters. Long editions are processed in sections. Candidates are consolidated into the same maximum character budget for each newsletter provider, before comparing all providers. The editor prioritises concrete new developments, material impact on AI users/builders, credible research evidence and useful capabilities; adverts, repetition and sender prominence do not increase priority. It merges shared stories into 4–6 brief highlights when enough meaningful news exists, aiming for no more than 180 words. A draft that cites at most one provider gets one editorial review against the other providers' candidates. A short digest prioritises the main news rather than preserving every detail. Sources remain available below it.
+Reports use **Europe/London** dates, including daylight saving, so travel doesn't change which emails belong to a day. Generation reads every page of emails in the selected day and the full body of each edition, including read or locally dismissed newsletters. Long editions are processed in sections. Each provider gets the same maximum candidate budget before comparing the whole day. The editor ranks consequential releases/availability/pricing changes, credible research, material policy/safety decisions and substantial new capabilities above routine tutorials, minor tool lists, promotions, opinion and isolated experiment details. It merges shared stories, keeps supporting facts and caveats with their parent story, and produces zero to six highlights within 180 words. Quiet days get fewer highlights, without a provider quota or filler.
+
+Final output is structured as headline, complete explanation and article reference. The server checks sentence endings, duplicate article/story entries, word limits and reference validity. A malformed or one-provider draft gets one editorial review against all candidates. A failed repair is not saved. These checks enforce format and sourcing; model-generated importance judgements and facts still need normal reader judgement.
 
 Finished reports are stored for **30 days** and appear on your other devices after connecting Gmail. Generate again to include emails received after the previous report; an unchanged set of bodies uses the cached report without another AI call. Reports are generated on demand, not by a scheduled background job. Opening a hosted Daily brief also checks all labelled emails for the selected day without fetching bodies or using AI. The coverage panel shows available providers and flags editions absent from a saved report. **Source editions** always lists every email processed, rather than only those cited in the highlights. If only one labelled edition is found, the app explains that the Gmail label and arrival date need checking. This is a newsletter digest, not an independent web-news search. Saving a brief doesn't mark Gmail messages read. Read/saved/dismissed edition progress is local to each browser.
 
 Generation shows **Collecting → Evaluating → Reporting → Complete**. Collection reflects actual email reads; the server streams section evaluation, provider consolidation, report writing/review and saving. The bar represents stage progress rather than a time estimate and reaches completion only after the saved report arrives. Cancellation and quota errors stop the bar without claiming completion. Unchanged days can complete immediately from cache.
 
-Reports display numbered highlights instead of raw Markdown bullets. Green linked phrases open the original article in a new tab; when only an edition reference is available, they open that newsletter inside Signal. Links resolve against article URLs extracted from the emails, rather than URLs invented by the model. Existing saved reports also get the new styling; generate once again to add inline citations to a report made with an older version.
+Each numbered highlight has a green headline, short explanation and publisher/destination label. The entire card opens its specific article URL in a new tab and supports touch/keyboard navigation. URLs come from sanitised newsletter headings, prose links or plain-text editions; the model cannot invent one. Internal source keys never appear as visible citation codes. An edition lacking any extractable article link is flagged and remains readable in Source editions; its unlinked stories cannot be included as direct-article highlights.
+
+Older saved reports remain readable with citation codes hidden and visibly clipped fragments omitted. They are marked for **Regenerate daily brief** so selection and complete direct links are rebuilt with the new pipeline; reading them does not consume AI quota. A new generation scrolls its finished stories into view and respects reduced-motion preferences. The unused sidebar slogan has been removed.
 
 The reader uses one card per newsletter section, with green linked article titles and their following text together inside it. Publisher heading structure also helps identify new section names. The close button stays visible while the email scrolls, and clicking/tapping the shaded space outside the card closes it. There is also a Close edition button at the bottom and Escape works on a keyboard.
 
@@ -54,7 +58,7 @@ Every edition card can be clicked/tapped to open the reader, with its native tit
 
 Catch up groups editions by newsletter. Selected filters have stable provider colours: TLDR blue, TLDR AI violet, TLDR Dev teal, AlphaSignal amber and DAIR.AI rose. Other/new newsletters receive a stable colour automatically. Click TLDR AI, AlphaSignal or any other source chip to select it, then select more chips to combine newsletters. Click a selected chip to remove it; **All** resets the filter. Selections persist in that browser for the connected account. New sources appear automatically as their labelled messages are loaded; **Load more newsletters** fetches older editions. Counts and filtering apply to the editions currently loaded, with Catch up limited to the last seven days and unread, undismissed editions.
 
-Saved and Archive keep their own lists. Daily briefs always include every newsletter for the selected day, regardless of the Catch up filter. On phones, the reading-view dropdown replaces the horizontal navigation; source chips scroll horizontally and reader controls remain visible while scrolling.
+Saved and Archive keep their own lists. Daily briefs read every newsletter for the selected day, regardless of the Catch up filter. On phones, the reading-view dropdown replaces the horizontal navigation and stays visible while scrolling; source chips scroll horizontally and reader controls remain visible while scrolling.
 
 ## Costs and limits
 
@@ -74,7 +78,7 @@ Persistent sign-in automatically refreshes expired access tokens. Temporary popu
 
 ## Later updates
 
-After merging a pull request, run `git pull`, `npm install` and `npm run deploy` in your repository clone. The ignored `wrangler.json` holds your public client ID and KV namespace ID; keep it when updating. Do not replace it with the placeholder example for an existing deployment. No Google origin change is needed if the website URL stays the same. All browser module imports and CSS use the release version as well as cache revalidation. The loaded release appears in the footer on desktop and phone; verify **Signal 1.6** after deploying.
+After merging a pull request, run `git pull`, `npm install` and `npm run deploy` in your repository clone. The ignored `wrangler.json` holds your public client ID and KV namespace ID; keep it when updating. Do not replace it with the placeholder example for an existing deployment. No Google origin change is needed if the website URL stays the same. All browser module imports and CSS use the release version as well as cache revalidation. The loaded release appears in the footer on desktop and phone; verify **Signal 1.7** after deploying.
 
 ## Local preview and verification
 

@@ -11,7 +11,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
     const signedIn = req.headers.cookie?.includes('signal_test=1');
-    if (url.pathname === '/api/config') return json(res, { hosted: true, persistentAuth: true, version: '1.6', clientId: 'test.apps.googleusercontent.com', label: 'AI Newsletters' });
+    if (url.pathname === '/api/config') return json(res, { hosted: true, persistentAuth: true, version: '1.7', clientId: 'test.apps.googleusercontent.com', label: 'AI Newsletters' });
     if (url.pathname === '/api/auth/session') return json(res, signedIn ? { connected: true, email: 'owner@example.com' } : { connected: false }, signedIn ? 200 : 401);
     if (url.pathname === '/api/auth/login') { res.writeHead(303, { Location: '/', 'Set-Cookie': 'signal_test=1; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000' }); return res.end(); }
     if (url.pathname === '/api/auth/logout') { res.setHeader('Set-Cookie', 'signal_test=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'); return json(res, { connected: false }); }
@@ -39,7 +39,11 @@ const server = createServer(async (req, res) => {
       await emit({ type: 'progress', stage: 'evaluating', done: 3, total: 3, message: 'Compared every newsletter.' });
       await emit({ type: 'progress', stage: 'reporting', message: 'Writing the report and linking articles…' });
       while (!allowComplete && !cancelled) await pause(10); if (cancelled) return;
-      saved = { date: data.date, summary: '* [Model news](A1) launches.\n* [Research](A2) improves evaluation.\n* [Tools](A3) become available.', references: buildReferences(data.sources), sources: data.sources.map(({ text, articles, ...metadata }) => metadata), generatedAt: new Date().toISOString() };
+      saved = { date: data.date, editorialVersion: 'signal-7', highlights: [
+        { headline: 'New model API becomes available', detail: 'Developers can now test the model through a new API.', reference: 'A1' },
+        { headline: 'Research improves model evaluation', detail: 'The researchers report new evidence for more useful model evaluations.', reference: 'A2' },
+        { headline: 'AI tools gain a new capability', detail: 'The tools now support a practical new workflow for developers.', reference: 'A3' }
+      ], references: buildReferences(data.sources), sources: data.sources.map(({ text, articles, ...metadata }) => metadata), generatedAt: new Date().toISOString() };
       await emit({ type: 'complete', report: saved }); res.end(); return;
     }
     const path = resolve(root, '.' + (url.pathname === '/' ? '/index.html' : url.pathname));
@@ -59,8 +63,8 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'owner@example.com');
   await page.locator('.edition').first().waitFor(); assert.equal(await page.locator('.edition').count(), 3);
   const modules = await page.evaluate(() => performance.getEntriesByType('resource').filter(item => /\.js(?:\?|$)/.test(item.name)).map(item => item.name));
-  assert.ok(modules.filter(url => url.startsWith(base)).every(url => url.endsWith('?v=6')));
-  assert.match(await page.locator('#footer-note + span').innerText(), /Signal 1\.6/);
+  assert.ok(modules.filter(url => url.startsWith(base)).every(url => url.endsWith('?v=7')));
+  assert.match(await page.locator('#footer-note + span').innerText(), /Signal 1\.7/);
   const filter = name => page.locator('#source-filters .filter-chip').filter({ has: page.locator('span').getByText(name, { exact: true }) });
   await filter('TLDR AI').click(); await filter('AlphaSignal').click(); await filter('DAIR.AI').click();
   const colours = await page.locator('#source-filters .filter-chip[aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)); assert.equal(new Set(colours).size, 3);

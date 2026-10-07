@@ -1,6 +1,14 @@
 # Update your existing hosted Signal app through Git
 
-Signal 1.6 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+Signal 1.7 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+
+## Release 1.7
+
+Daily briefs now contain complete, ranked stories with a direct article URL on every new highlight. Whole highlight cards open the article, and internal citation keys are hidden. The editor prioritises material releases, research and policy/tool changes; supporting statistics stay with their story rather than becoming filler bullets. The server validates structured output and allows one repair before refusing an incomplete report. News without an extractable article link is flagged instead of receiving an invented or unrelated URL.
+
+After merging, use the normal Git pull/install/deploy below. Existing Google setup, Worker secrets and sessions are preserved; no authentication setup rerun is needed. Verify **Signal 1.7** in the footer. Existing saved briefs display a regeneration notice: generate them again to replace the old selection and rebuild article links. The changed summary fingerprint prevents a regeneration from returning the previous cached draft. Merely opening an older report does not use AI quota.
+
+The unused sidebar slogan is removed. New briefs show their linked headline, explanation and publisher/destination, then scroll into view after manual generation, with reduced motion respected. The phone view selector stays visible while scrolling so switching sections does not require returning to the top.
 
 ## Release 1.6
 
@@ -51,6 +59,6 @@ Refresh https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/ on your phon
 
 Opening Daily brief checks all labelled emails received on the selected London-calendar date. A provider panel shows which newsletters are available. If a saved report includes only TLDR but later AlphaSignal or other editions are now available, it shows how many are missing. Generate again to include them. The coverage check fetches metadata only and uses no AI quota.
 
-Every full edition is read during generation, including read/dismissed emails and sources hidden by Catch up filters. All provider candidates receive an equal maximum budget before final comparison. Selection prioritises concrete new developments, practical impact and research evidence, merges duplicate stories and excludes adverts. A one-provider draft gets an extra review of the other providers. Source editions lists all processed emails; inline links identify sources for selected highlights.
+Every full edition is read during generation, including read/dismissed emails and sources hidden by Catch up filters. All provider candidates receive an equal maximum budget before final comparison. Selection prioritises concrete new developments, practical impact and research evidence, merges duplicate stories and excludes adverts. A one-provider or empty multi-provider draft gets an extra review of the other providers. Source editions lists all processed emails; each new highlight links directly to its matching article.
 
 If the panel itself finds only one labelled edition, check the other newsletters' AI Newsletters label and their arrival date. Weekly newsletters and emails from earlier dates are not included in today's digest.
