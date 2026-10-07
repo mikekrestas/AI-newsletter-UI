@@ -7,9 +7,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://gmail.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; style-src 'self' https://accounts.google.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>Signal — AI newsletters</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="reader-updates.css?v=5">
-  <script type="module" src="app.js?v=5"></script>
+  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="reader-updates.css?v=6">
+  <script type="module" src="app.js?v=6"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to newsletters</a>
@@ -28,7 +28,7 @@
         <button class="nav-item" data-view="archive"><span>Archive</span></button>
       </nav>
       <div class="sidebar-note"><span class="mini-line" aria-hidden="true"></span><p>You don’t have to read everything.</p><span>Save what matters. Leave the rest.</span></div>
-      <div class="sidebar-bottom"><span>Signal 1.5 · Personal reader</span><a href="setup.html" target="_blank" rel="noopener">Gmail setup guide</a></div>
+      <div class="sidebar-bottom"><span>Signal 1.6 · Personal reader</span><a href="setup.html" target="_blank" rel="noopener">Gmail setup guide</a></div>
     </aside>
     <main id="main" tabindex="-1">
       <div class="page-title"><div><span id="view-eyebrow" class="eyebrow">A LITTLE LESS NOISE</span><h1 id="view-title">Catch up</h1><p id="view-description">Your last seven days. Older editions can wait.</p></div><button id="refresh-button" class="button secondary" disabled>Refresh</button></div>
@@ -43,6 +43,7 @@
         <p id="brief-help" class="field-help">Free daily briefs, saved for 30 days. Cloudflare processes your newsletter text. <a href="brief-setup.html" target="_blank" rel="noopener">How it works</a></p>
         <div id="brief-day-sources" class="brief-day-sources" hidden><h3 id="brief-day-heading"></h3><div id="brief-day-provider-list" class="provider-badges"></div><p id="brief-day-note"></p></div>
         <div class="brief-buttons"><button id="generate-brief" class="button primary">Generate daily brief</button><button id="cancel-brief" class="button secondary" hidden>Cancel</button></div>
+        <div id="brief-progress-panel" class="brief-progress" hidden><progress id="brief-progress" max="100" value="0" aria-label="Daily brief generation progress"></progress><ol class="brief-stages"><li data-stage="collecting">Collecting</li><li data-stage="evaluating">Evaluating</li><li data-stage="reporting">Reporting</li><li data-stage="complete">Complete</li></ol></div>
         <p id="brief-status" role="status" aria-live="polite">Choose a date to summarise all newsletters received that day.</p>
         <div id="brief-result" hidden><div id="brief-coverage" class="eyebrow"></div><div class="brief-result-heading"><h2>The day’s highlights</h2><span class="brief-link-hint">Green text opens a source</span></div><div id="brief-text" class="brief-text"></div><p class="field-help">Stories are chosen for new developments, practical impact and research evidence. Repeated coverage is merged. Source editions lists every email processed.</p><details id="brief-sources"><summary>Source editions</summary><div id="brief-source-list"></div></details></div>
       </section>
@@ -51,18 +52,19 @@
       <section id="newsletter-list" class="newsletter-list" aria-label="Newsletter editions" aria-busy="false"></section>
       <div id="empty" class="empty" hidden><span class="empty-symbol" aria-hidden="true">✓</span><h2 id="empty-title">You’re caught up.</h2><p id="empty-description">Come back when there’s something new.</p><button id="clear-filters" class="button secondary" hidden>Show all newsletters</button></div>
       <button id="load-more" class="button secondary load-more" hidden>Load older editions</button>
-      <footer class="reading-footer"><span id="footer-note">Progress stays in this browser. Gmail is never changed.</span><span>No endless feed.</span></footer>
+      <footer class="reading-footer"><span id="footer-note">Progress stays in this browser. Gmail is never changed.</span><span>Signal 1.6</span></footer>
     </main>
   </div>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <div class="dialog-head"><h2 id="settings-title">Connect your newsletters</h2><button class="icon-button" data-close="settings-dialog" aria-label="Close settings">×</button></div>
     <p class="dialog-intro">One-time setup using your own free Google OAuth client. Only its public client ID goes here—never a password or client secret.</p>
+    <p id="session-settings-note" class="field-help" hidden>This deployment uses temporary Gmail connections. <a href="session-setup.html" target="_blank" rel="noopener">Enable persistent sign-in</a> to stay connected across refreshes and browser restarts.</p>
     <form id="settings-form">
       <label for="client-id">Google OAuth client ID</label><input id="client-id" autocomplete="off" placeholder="…apps.googleusercontent.com" required pattern="[A-Za-z0-9._-]+\.apps\.googleusercontent\.com">
       <label for="gmail-label">Gmail label</label><input id="gmail-label" value="AI Newsletters" maxlength="100" required><p class="field-help">Create this label in Gmail and use filters to add your selected newsletters. Archived mail is included.</p>
       <div class="origin-box"><span>Authorised JavaScript origin</span><code id="origin"></code></div>
       <p class="field-help"><a href="setup.html" target="_blank" rel="noopener">Follow the setup guide</a> to enable the Gmail API, add yourself as a test user and register this origin.</p>
-      <div class="privacy-note">Read-only Gmail access lets the app read your mailbox; Google cannot restrict it to one label. Signal reads your chosen label. Access tokens are kept in memory and sent to the private backend to verify your account. Daily brief generation sends newsletter text to Cloudflare AI. Only finished reports and their source metadata are kept for 30 days. Saved/read/dismissed IDs stay in this browser.</div>
+      <div class="privacy-note">Read-only Gmail access covers your mailbox; Signal reads your chosen label. With persistent sign-in enabled, Gmail credentials are encrypted on the server and your browser receives a secure session cookie. Temporary connections keep the token in memory. Daily brief generation sends newsletter text to Cloudflare AI. Reports are saved for 30 days. Reading progress stays in this browser.</div>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="settings-dialog">Cancel</button><button type="submit" class="button primary">Save settings</button></div>
     </form>
   </dialog>

@@ -1,6 +1,19 @@
 # Update your existing hosted Signal app through Git
 
-Signal 1.5 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+Signal 1.6 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+
+## Release 1.6
+
+The entire edition card now opens the reader; action buttons remain separate. A live stage bar shows Collecting, Evaluating, Reporting and Complete. Provider colours and all browser imports are release-versioned, and the phone/desktop footer identifies Signal 1.6.
+
+After the normal Git pull/install/deploy below, persistent sign-in needs this one-time activation:
+
+1. Add `https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/api/auth/callback` as an **Authorised redirect URI** in your existing Google Web application client. Keep its existing JavaScript origins.
+2. Run `npm run setup:session`. Paste that client's secret into Wrangler's prompt when asked. The script stores it securely and creates the session encryption key without replacing an existing key.
+3. Run `npm run deploy` and connect Gmail once. Future refreshes/browser restarts restore the saved account; Disconnect removes that browser's session.
+4. For long-lived Gmail grants, change Google Auth Platform → Audience → Publishing status to **In production**, then reconnect. Testing mode normally expires offline grants after seven days. Google revocation and cleared browser cookies can still require a new login.
+
+Your active configuration and cache stay in place. No new paid service is added. If persistent sign-in has not been activated, temporary popup connections continue to work and will still require reconnection after refresh; the implementation cannot obtain a refresh token using the old popup-token flow. See [session setup](public/session-setup.html).
 
 ## One-time move from downloaded files
 

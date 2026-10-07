@@ -1,15 +1,16 @@
 {
   "name": "ai-newsletter-reader",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check public/app.js && node --check public/gmail.js && node --check public/reader.js && node --check public/report.js && node --check public/sources.js && node --check public/demo.js && node --check public/brief.js && node --check public/dates.js && node --check server.mjs && node --check worker.mjs && node --check summary.mjs && node --check scripts/setup-hosted.mjs",
+    "check": "node --check public/app.js && node --check public/gmail.js && node --check public/reader.js && node --check public/report.js && node --check public/sources.js && node --check public/demo.js && node --check public/brief.js && node --check public/dates.js && node --check server.mjs && node --check worker.mjs && node --check auth.mjs && node --check public/progress.js && node --check summary.mjs && node --check scripts/setup-hosted.mjs && node --check scripts/setup-session.mjs",
     "setup:hosted": "node scripts/setup-hosted.mjs",
+    "setup:session": "node scripts/setup-session.mjs",
     "deploy": "wrangler deploy",
     "dev:hosted": "wrangler dev --port 3000",
-    "test:worker": "node tests/worker.test.mjs"
+    "test:worker": "node tests/worker.test.mjs && node tests/auth.test.mjs"
   },
   "engines": { "node": ">=22" },
   "devDependencies": { "wrangler": "4.148.0" }

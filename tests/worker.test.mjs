@@ -155,4 +155,29 @@ try {
     assert.equal(newsletterTone('TLDR Tech'), 'blue');
     assert.equal(newsletterTone('Research Weekly'), newsletterTone('Research Weekly'));
   });
+  await test('streamed progress follows actual evaluation, reporting and saved completion', async () => {
+    const f = fixture(); const events = [];
+    const response = await worker.fetch(request('POST', undefined, { headers: { Accept: 'text/event-stream' } }), f.env);
+    assert.match(response.headers.get('Content-Type'), /text\/event-stream/);
+    const text = await response.text();
+    for (const part of text.trim().split('\n\n')) events.push(JSON.parse(part.slice(6)));
+    assert.equal(events[0].stage, 'evaluating');
+    assert.ok(events.some(event => event.stage === 'evaluating' && event.done === event.total));
+    assert.ok(events.some(event => event.stage === 'reporting'));
+    assert.equal(events.at(-1).type, 'complete'); assert.equal(f.writes.length, 1);
+    const calls = f.inputs.length;
+    const cached = await worker.fetch(request('POST', undefined, { headers: { Accept: 'text/event-stream' } }), f.env);
+    assert.match(await cached.text(), /"cached":true/); assert.equal(f.inputs.length, calls);
+    const failed = fixture(); failed.env.AI.run = async () => { throw new Error('daily neurons quota exceeded'); };
+    const failure = await worker.fetch(request('POST', undefined, { headers: { Accept: 'text/event-stream' } }), failed.env);
+    assert.match(await failure.text(), /"type":"error"/); assert.equal(failed.writes.length, 0);
+  });
+  await test('cancelling a progress stream prevents partial report persistence', async () => {
+    const f = fixture(); let release;
+    f.env.AI.run = async () => { await new Promise(resolve => { release = resolve; }); return { response: 'Notes on model news (A1).' }; };
+    const response = await worker.fetch(request('POST', undefined, { headers: { Accept: 'text/event-stream' } }), f.env);
+    const reader = response.body.getReader(); await reader.read();
+    await reader.cancel(); release();
+    await new Promise(resolve => setTimeout(resolve, 10)); assert.equal(f.writes.length, 0);
+  });
 } finally { globalThis.fetch = originalFetch; }

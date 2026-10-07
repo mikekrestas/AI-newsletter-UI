@@ -1,5 +1,6 @@
 import { dayRange } from './public/dates.js';
 import { generateSummary, buildReferences, MODEL, SUMMARY_VERSION } from './summary.mjs';
+import { AuthError, authRoute, gmailRoute, sessionAccess, sessionConfigured, checkOrigin } from './auth.mjs';
 
 class ApiError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 function json(value, status = 200) {
@@ -13,7 +14,11 @@ async function owner(request, env) {
   if (!env.OWNER_EMAIL || !env.REPORTS || !env.AI) throw new ApiError('Hosted summaries are not configured. Complete the Cloudflare setup first.', 503);
   const origin = request.headers.get('Origin');
   if (origin && origin !== new URL(request.url).origin) throw new ApiError('Use Signal from its own website.', 403);
-  const authorization = request.headers.get('Authorization');
+  let authorization = request.headers.get('Authorization');
+  if (!authorization && sessionConfigured(env)) {
+    checkOrigin(request, request.method === 'POST');
+    authorization = 'Bearer ' + (await sessionAccess(request, env)).accessToken;
+  }
   if (!/^Bearer [^\s]{10,4096}$/.test(authorization || '')) throw new ApiError('Connect Gmail to view or generate your private report.', 401);
   // Verify with Gmail itself, never trust an email address supplied by the client.
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: authorization }, signal: AbortSignal.timeout(15000) });
@@ -61,13 +66,15 @@ function validateSources(body) {
   }).sort((a, b) => a.id.localeCompare(b.id));
 }
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (url.pathname === '/api/config' && request.method === 'GET') return json({
-        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.5'
+        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.6', persistentAuth: sessionConfigured(env)
       });
+      if (url.pathname.startsWith('/api/auth/')) return authRoute(request, env);
+      if (url.pathname.startsWith('/api/gmail/')) return gmailRoute(request, env);
       if (url.pathname !== '/api/brief') return json({ error: 'Unknown endpoint.' }, 404);
       if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Use GET or POST.' }, 405);
       const identity = await owner(request, env);
@@ -80,21 +87,46 @@ export default {
       if (request.method === 'GET') return json({ report: stored ? { ...stored, cached: true } : null });
       const sources = validateSources(body);
       const fingerprint = await hash(JSON.stringify({ model: MODEL, version: SUMMARY_VERSION, sources }));
-      if (stored?.fingerprint === fingerprint) return json({ report: { ...stored, cached: true } });
       const references = buildReferences(sources);
-      const summary = await generateSummary(sources, env.AI, request.signal, references);
-      request.signal.throwIfAborted();
-      const report = { date, summary, references, fingerprint, generatedAt: new Date().toISOString(), sources: sources.map(({ text, articles, ...metadata }) => metadata) };
-      // Persist only completed reports, not Gmail tokens or raw newsletter text.
-      await env.REPORTS.put(key, JSON.stringify(report), { expirationTtl: 30 * 86400 });
-      return json({ report: { ...report, cached: false } });
+      const finish = async (signal, onProgress = () => {}) => {
+        if (stored?.fingerprint === fingerprint) return { ...stored, cached: true };
+        const summary = await generateSummary(sources, env.AI, signal, references, onProgress);
+        signal.throwIfAborted();
+        onProgress({ stage: 'reporting', message: 'Saving the finished brief for your other devices…' });
+        const report = { date, summary, references, fingerprint, generatedAt: new Date().toISOString(), sources: sources.map(({ text, articles, ...metadata }) => metadata) };
+        await env.REPORTS.put(key, JSON.stringify(report), { expirationTtl: 30 * 86400 });
+        return { ...report, cached: false };
+      };
+      if (request.headers.get('Accept')?.includes('text/event-stream')) {
+        const cancelled = new AbortController(); const signal = AbortSignal.any([request.signal, cancelled.signal]);
+        const stream = new ReadableStream({
+          start(controller) {
+            const emit = value => { if (!signal.aborted) controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`)); };
+            const heartbeat = setInterval(() => emit({ type: 'heartbeat' }), 15000);
+            const task = (async () => {
+              try {
+                const report = await finish(signal, progress => emit({ type: 'progress', ...progress }));
+                emit({ type: 'complete', report });
+              } catch (error) { const failure = errorResponse(error); emit({ type: 'error', error: failure.message, status: failure.status }); }
+              finally { clearInterval(heartbeat); if (!signal.aborted) controller.close(); }
+            })();
+            context?.waitUntil(task);
+          },
+          cancel() { cancelled.abort(); }
+        });
+        return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' } });
+      }
+      return json({ report: await finish(request.signal) });
     } catch (error) {
-      if (error instanceof ApiError) return json({ error: error.message }, error.status);
-      if (error.name === 'AbortError') return json({ error: 'Report cancelled. No partial report was saved.' }, 499);
-      if (/quota|neuron|limit|429|10000|daily allocation/i.test(error.message)) return json({ error: 'The free AI quota or processing limit was reached. Try again later; no paid fallback is used.' }, 429);
-      if (error.message?.startsWith('Choose a valid')) return json({ error: error.message }, 400);
-      if (/No partial report|could not condense|usable report/i.test(error.message)) return json({ error: error.message }, 422);
-      return json({ error: 'The hosted service could not finish this request. Try again. No partial report was saved.' }, 503);
+      const failure = errorResponse(error); return json({ error: failure.message }, failure.status);
     }
   }
 };
+function errorResponse(error) {
+  if (error instanceof ApiError || error instanceof AuthError) return { message: error.message, status: error.status };
+  if (error.name === 'AbortError') return { message: 'Report cancelled. No partial report was saved.', status: 499 };
+  if (/quota|neuron|limit|429|10000|daily allocation/i.test(error.message)) return { message: 'The free AI quota or processing limit was reached. Try again later; no paid fallback is used.', status: 429 };
+  if (error.message?.startsWith('Choose a valid')) return { message: error.message, status: 400 };
+  if (/No partial report|could not condense|usable report/i.test(error.message)) return { message: error.message, status: 422 };
+  return { message: 'The hosted service could not finish this request. Try again. No partial report was saved.', status: 503 };
+}

@@ -1,15 +1,16 @@
-import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js';
-import { readableContent, decodeEntities, extractArticles } from './reader.js';
-import { newsletterName, newsletterTone } from './sources.js';
-import { renderReport } from './report.js';
-import { demoEditions } from './demo.js';
-import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata } from './brief.js';
+import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=6';
+import { readableContent, decodeEntities, extractArticles } from './reader.js?v=6';
+import { newsletterName, newsletterTone } from './sources.js?v=6';
+import { renderReport } from './report.js?v=6';
+import { demoEditions } from './demo.js?v=6';
+import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata } from './brief.js?v=6';
+import { showBriefProgress, stopBriefProgress } from './progress.js?v=6';
 const $ = id => document.getElementById(id);
 const sevenDays = 7 * 86400000;
 let view = 'catchup', mode = 'welcome', account = '', editions = [], progress = {}, gmail = null, labelId = '', nextPage = null, busy = false, generation = 0, readerRequest = 0, expiresAt = 0;
 let settings = readStorage('signal:settings', { clientId: '', label: 'AI Newsletters' });
 let briefController = null, briefBusy = false;
-let hosted = false, savedBriefController = null;
+let hosted = false, persistentAuth = false, savedBriefController = null;
 let selectedSources = new Set();
 function readStorage(key, fallback) { try { const value = JSON.parse(localStorage.getItem(key)); return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback; } catch { return fallback; } }
 function notice(message, error = false, undo) {
@@ -164,6 +165,7 @@ function closeSession(clearAccount = true) {
   savedBriefController?.abort(); savedBriefController = null;
   $('brief-result').hidden = true; $('brief-text').replaceChildren(); $('brief-source-list').replaceChildren();
   $('brief-day-sources').hidden = true;
+  $('brief-progress-panel').hidden = true;
   $('brief-status').textContent = 'Choose a date to summarise all newsletters received that day.';
   generation++; readerRequest++; gmail?.close(); gmail = null; expiresAt = 0; labelId = ''; nextPage = null; busy = false; editions = []; progress = {}; mode = 'welcome';
   selectedSources.clear();
@@ -171,7 +173,14 @@ function closeSession(clearAccount = true) {
   if ($('reader-dialog').open) $('reader-dialog').close(); render();
 }
 async function connect() {
-  if (gmail) { closeSession(); notice('Disconnected. Your local progress is kept for your next connection.'); return; }
+  if (gmail) {
+    if (gmail.persistent) {
+      try { const result = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!result.ok) throw new Error('Sign-out could not finish. Please try again.'); }
+      catch (error) { notice(error.message, true); return; }
+    }
+    closeSession(); notice('Disconnected. Your local progress is kept for your next connection.'); return;
+  }
+  if (persistentAuth) { location.assign('/api/auth/login'); return; }
   if (!settings.clientId) { openSettings(); return; }
   // Google library is normally preloaded after settings; a second click preserves
   // the user gesture needed for the OAuth popup if it was not ready yet.
@@ -199,6 +208,25 @@ async function connect() {
     }
   });
   client.requestAccessToken({ prompt: '' });
+}
+async function restoreHostedSession() {
+  const attempt = generation;
+  let activeGeneration = attempt;
+  busy = true; render(); notice('Restoring your saved Gmail sign-in…');
+  try {
+    const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' });
+    const sessionInfo = await response.json();
+    if (attempt !== generation) return;
+    if (response.status === 401) { busy = false; notice(''); render(); return; }
+    if (!response.ok) throw new Error(sessionInfo.error || 'Saved sign-in could not be restored. Try again.');
+    closeSession(); const session = generation; activeGeneration = session;
+    gmail = new Gmail('', true); expiresAt = Infinity; account = sessionInfo.email;
+    mode = 'gmail'; progress = readStorage(progressKey(), {}); loadSourceSelection();
+    busy = true; render();
+    labelId = await gmail.labelId(settings.label);
+    if (session !== generation) return;
+    busy = false; await loadPage(true, session);
+  } catch (error) { if (activeGeneration !== generation || error.name === 'AbortError') return; busy = false; notice(error.message, true); render(); }
 }
 async function metadataBatch(ids, api) {
   const result = [];
@@ -276,6 +304,7 @@ function clearBrief() {
   savedBriefController?.abort(); savedBriefController = null;
   $('brief-result').hidden = true; $('brief-text').replaceChildren(); $('brief-source-list').replaceChildren();
   $('brief-day-sources').hidden = true;
+  $('brief-progress-panel').hidden = true;
   $('brief-status').textContent = 'Choose a date to summarise all newsletters received that day.';
   $('brief-status').classList.remove('is-error');
 }
@@ -352,6 +381,8 @@ $('generate-brief').addEventListener('click', async () => {
   const controller = new AbortController(); briefController = controller; briefBusy = true;
   clearBrief(); render();
   const update = (message, error = false) => { if (briefController === controller) { $('brief-status').textContent = message; $('brief-status').classList.toggle('is-error', error); } };
+  const stage = progress => { if (briefController === controller) showBriefProgress(progress); };
+  stage({ stage: 'collecting', message: 'Collecting every newsletter for this date…' });
   try {
     let sources;
     if (demo) {
@@ -359,22 +390,24 @@ $('generate-brief').addEventListener('click', async () => {
         .map(item => ({ ...item, text: newsletterText({ content: item.demoBody, html: true }), articles: extractArticles({ content: item.demoBody, html: true }) }));
     } else {
       if (!labelId) labelId = await api.labelId(settings.label);
-      sources = await collectDay(api, labelId, date, controller.signal, update);
+      sources = await collectDay(api, labelId, date, controller.signal, update, stage);
     }
     controller.signal.throwIfAborted();
-    if (!sources.length) { update('No newsletters were received on this date. Choose another day.'); return; }
-    update('Summarising all newsletter sections and merging the day’s news… This can take a minute.');
+    if (!sources.length) { $('brief-progress-panel').hidden = true; update('No newsletters were received on this date. Choose another day.'); return; }
+    stage({ stage: 'evaluating', message: 'Summarising all newsletter sections and merging the day’s news…' });
     const report = demo ? {
       date, sources,
       references: sources.map((source, index) => ({ key: 'E' + (index + 1), type: 'edition', editionId: source.id, title: source.subject, source: source.source })),
       summary: `* [AI model releases](E1) focus on coding and practical reasoning.\n* Research explores more efficient inference and stronger evaluations.\n* New developer tools help teams build and test AI applications.\n* This is a fictional sample brief. Connect Gmail for a report of your own newsletters.`
-    } : await api.hostedBrief(date, sources, controller.signal);
+    } : await api.hostedBrief(date, sources, controller.signal, stage);
     controller.signal.throwIfAborted();
     if (session !== generation) return;
     showReport(report, demo);
     showDayCoverage(sources, report);
+    stage({ stage: 'complete', message: 'The report is complete.' });
     update(demo ? 'Fictional sample brief. No AI request was made.' : report.cached ? 'No new emails: your saved brief is up to date. No additional AI request was needed.' : 'Brief ready and saved for your other devices. Generating does not mark your newsletters read.');
   } catch (error) {
+    if (briefController === controller) stopBriefProgress(controller.signal.aborted ? 'Cancelled' : 'Generation stopped');
     update(controller.signal.aborted ? 'Report cancelled. No partial brief was saved.' : error.message, !controller.signal.aborted);
   } finally {
     if (briefController === controller) { briefController = null; briefBusy = false; render(); }
@@ -392,12 +425,17 @@ render();
 if (settings.clientId) loadGoogleIdentity().catch(() => {});
 // Hosted configuration supplies the public OAuth ID on every device. No secret
 // or Gmail token is included in this response or saved to browser storage.
-fetch('/api/config', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(config => {
+fetch('/api/config', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(async config => {
   if (!config?.hosted) return;
   hosted = true;
+  persistentAuth = Boolean(config.persistentAuth);
+  $('session-settings-note').hidden = persistentAuth;
   if (config.clientId) {
     settings = { clientId: config.clientId, label: config.label };
     store('signal:settings', settings); $('welcome-connect').textContent = 'Connect Gmail';
-    loadGoogleIdentity().catch(() => {}); render();
+    if (!persistentAuth) loadGoogleIdentity().catch(() => {}); render();
   }
+  if (persistentAuth) await restoreHostedSession();
+  const signin = new URL(location.href).searchParams.get('signin');
+  if (signin === 'cancelled') { notice('Google sign-in was cancelled. You can connect when ready.'); history.replaceState(null, '', location.pathname); }
 }).catch(() => {});
