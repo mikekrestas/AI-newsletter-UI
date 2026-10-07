@@ -1,4 +1,9 @@
-export function newsletterName(source = '') {
+export function newsletterName(source = '', subject = '', snippet = '') {
+  // LinkedIn sometimes uses its platform name instead of the newsletter's
+  // name in From. Use explicit DAIR identity in metadata, only for LinkedIn
+  // senders; an unrelated newsletter mentioning DAIR stays its own provider.
+  const linkedin = /<[^>]*@(?:[a-z0-9-]+\.)*linkedin\.com\s*>/i.test(source) || /^\s*"?LinkedIn"?\s*(?:<|$)/i.test(source);
+  if (linkedin && (/\bDAIR[.\s-]*AI\b/i.test([source, subject, snippet].join(' ')) || /\bTop (?:AI|ML) Papers of the Week\b/i.test([source, subject].join(' ')))) return 'DAIR.AI';
   const name = source.replace(/\s*<[^>]*>/g, '').replace(/^"|"$/g, '').replace(/\s+via LinkedIn$/i, '').replace(/\s+newsletter$/i, '').replace(/\s+/g, ' ').trim();
   if (/^TLDR(?:\s+Tech)?$/i.test(name)) return 'TLDR';
   if (/^TLDR\s+AI$/i.test(name)) return 'TLDR AI';

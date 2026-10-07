@@ -1,5 +1,19 @@
 # Signal: chat and project handoff
 
+## Current work: refresh and DAIR.AI coverage, 7 October 2026
+
+Signal 1.8 is proposed on `codex/newsletter-refresh-coverage`, based on main commit `15e35bcc849612c228f0d51415e3b6294f319e1c` (documentation PR #6 merged). The original Signal 1.7 history below remains a dated snapshot. The 1.8 change awaits the owner's PR review/merge and normal deployment; production and the owner's actual inbox were not inspected.
+
+The user reported missing DAIR.AI LinkedIn newsletters, an ineffective Refresh button, and two visible editions when four were expected on 7 October. Code inspection found reader refresh fetching only the first page, provider identification using only From, and Catch up hiding locally read/dismissed or source-filtered editions without a received-total explanation. These are demonstrated failure paths; the precise cause of each missing real email is unverified because sender/subject/label details were not supplied.
+
+Refresh now resolves the label afresh, fetches all pages for the recent seven London calendar days using the same bounded metadata collector as daily briefs, bypasses response caches, preserves loaded older editions, and rechecks saved-brief coverage without AI/body reads. Collections commit only after success; failures retain the existing list and repeated page tokens stop explicitly. Recent collection has a 1,000-edition cap; daily generation retains its 300-edition cap. Catch up still means unread, undismissed editions; a received-today panel explains hidden editions and links to Archive.
+
+LinkedIn metadata containing DAIR.AI or the verified Top AI/ML Papers of the Week newsletter titles maps to DAIR.AI for both lists and daily inputs. Other providers remain separate. DAIR.AI's LinkedIn company page identifies Top AI Papers of the Week: https://www.linkedin.com/company/dair-ai. No mailbox writes, unlabelled-mail imports, web article fetching, auth setup or model change was introduced. A LinkedIn email containing only a preview still supplies only that preview to the brief.
+
+Verification: syntax checks and 20 backend tests passed, including shared pagination/duplicates/date-boundary/DST/limit/failure checks and LinkedIn identity cases. Six Chromium suites passed: the five original suites plus `tests/refresh-coverage-smoke.mjs`. The new suite exercises four editions across pages, read/dismissed/filter visibility, DAIR LinkedIn title recognition, older-edition retention, failure recovery, stale-report clearing and the same four full editions sent to daily generation on desktop/phone viewports in a travelling timezone. Google and AI are mocked; physical-phone and live inbox/editorial checks remain for after deployment. Browser screenshot output and the session test's path guard now work on Windows as well as Linux. Package/footer are 1.8, browser assets v=8; editorial version stays signal-7 because ranking/validation did not change.
+
+Next action after review/merge: use the owner's real deployment clone and existing ignored wrangler.json, pull/install/deploy, confirm Signal 1.8, then Refresh and inspect today's received total and Archive. If a newsletter remains absent, verify that specific message has AI Newsletters and the expected London arrival date. Regenerate the selected daily brief if its coverage panel reports missing editions. Preserve the already-working credentials and existing session key.
+
 Snapshot: 7 October 2026. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
 
 ## Current starting point
