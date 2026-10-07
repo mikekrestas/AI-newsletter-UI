@@ -1,6 +1,12 @@
 # Update your existing hosted Signal app through Git
 
-Signal 1.7 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+Signal 1.8 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+
+## Release 1.8
+
+Refresh now loads every results page in the recent seven London-calendar days and checks saved daily-brief coverage, with explicit loading/completion feedback. Previously loaded older editions remain available. Today's received total explains read/dismissed editions and source filters, with a shortcut to the full Archive list. DAIR.AI editions sent through LinkedIn are recognised from sender/subject/preview metadata and the Top AI/ML Papers of the Week titles, consistently in the reader and daily brief input.
+
+Use the normal pull/install/deploy steps below, preserving your existing wrangler.json and secrets. Verify **Signal 1.8** in the footer. No auth setup or new KV is needed. Refresh uses no AI; regenerate an older brief if the coverage panel finds editions absent from it. Emails must still have the configured Gmail label. LinkedIn emails that contain only previews are summarised from those previews, not the full article hosted on LinkedIn.
 
 ## Release 1.7
 

@@ -9,7 +9,7 @@ try {
   await page.goto(base);
   await page.getByRole('button', { name: 'Try a demo' }).click();
   assert.equal(await page.locator('.edition').count(), 5);
-  await page.screenshot({ path: '/tmp/newsletter-reader-preview.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/newsletter-reader-preview.png', fullPage: true });
   await page.locator('.save-button').first().click();
   await page.locator('[data-view="saved"]').click();
   assert.equal(await page.locator('.edition').count(), 1);
@@ -30,7 +30,7 @@ try {
   assert.match(await page.locator('#notice').innerText(), /1 loaded older edition/);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Mobile page overflow');
-  await page.screenshot({ path: '/tmp/newsletter-reader-mobile.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/newsletter-reader-mobile.png', fullPage: true });
   // Validate safe reader reconstruction with hostile HTML, Unicode and blocked URLs.
   const security = await page.evaluate(async () => {
     const { readableContent } = await import('./reader.js');

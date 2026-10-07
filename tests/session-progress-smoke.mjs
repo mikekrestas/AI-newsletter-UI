@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { resolve, extname } from 'node:path';
+import { resolve, extname, sep } from 'node:path';
 import { buildReferences } from '../summary.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root = resolve('public'); let saved = null, streams = 0, cancelledStreams = 0, allowReporting = false, allowComplete = false;
@@ -47,7 +47,7 @@ const server = createServer(async (req, res) => {
       await emit({ type: 'complete', report: saved }); res.end(); return;
     }
     const path = resolve(root, '.' + (url.pathname === '/' ? '/index.html' : url.pathname));
-    if (!path.startsWith(root + '/')) { res.writeHead(404); return res.end(); }
+    if (!path.startsWith(root + sep)) { res.writeHead(404); return res.end(); }
     const data = await readFile(path); const types = { '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.html': 'text/html' };
     res.writeHead(200, { 'Content-Type': types[extname(path)] || 'text/plain', 'Cache-Control': 'no-store' }); res.end(data);
   } catch (error) { if (!res.headersSent) json(res, { error: error.message }, 500); else res.destroy(error); }
@@ -63,8 +63,8 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'owner@example.com');
   await page.locator('.edition').first().waitFor(); assert.equal(await page.locator('.edition').count(), 3);
   const modules = await page.evaluate(() => performance.getEntriesByType('resource').filter(item => /\.js(?:\?|$)/.test(item.name)).map(item => item.name));
-  assert.ok(modules.filter(url => url.startsWith(base)).every(url => url.endsWith('?v=7')));
-  assert.match(await page.locator('#footer-note + span').innerText(), /Signal 1\.7/);
+  assert.ok(modules.filter(url => url.startsWith(base)).every(url => url.endsWith('?v=8')));
+  assert.match(await page.locator('#footer-note + span').innerText(), /Signal 1\.8/);
   const filter = name => page.locator('#source-filters .filter-chip').filter({ has: page.locator('span').getByText(name, { exact: true }) });
   await filter('TLDR AI').click(); await filter('AlphaSignal').click(); await filter('DAIR.AI').click();
   const colours = await page.locator('#source-filters .filter-chip[aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)); assert.equal(new Set(colours).size, 3);
@@ -89,6 +89,7 @@ try {
   await page.goto(base); await page.waitForFunction(() => document.querySelector('#connection').textContent === 'owner@example.com');
   assert.equal(await page.locator('#footer-note + span').isVisible(), true);
   await page.locator('.edition').first().waitFor();
+  await page.locator('.edition').first().scrollIntoViewIfNeeded();
   const mobileCard = await page.locator('.edition').first().boundingBox(); await page.touchscreen.tap(mobileCard.x + 8, mobileCard.y + mobileCard.height / 2);
   await page.locator('#reader-content').getByText(/News details/).waitFor(); await page.getByRole('button', { name: 'Close reader' }).click();
   await page.locator('#mobile-view').selectOption('brief');
@@ -102,7 +103,7 @@ try {
   await page.locator('.brief-stages [data-stage="complete"][aria-current="step"]').waitFor();
   assert.equal(await page.locator('#brief-progress').evaluate(node => node.value), 100); assert.equal(await page.locator('.brief-item').count(), 3);
   await pause(250); // Let the short progress-bar transition finish before capturing.
-  await page.screenshot({ path: '/tmp/signal-v16-phone-progress.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v16-phone-progress.png', fullPage: true });
   allowReporting = false; allowComplete = false;
   await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
   await page.locator('.brief-stages [data-stage="evaluating"][aria-current="step"]').waitFor();

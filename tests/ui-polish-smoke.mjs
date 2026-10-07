@@ -13,7 +13,7 @@ const choose = async name => {
 try {
   await page.goto(base); await page.getByRole('button', { name: 'Try a demo' }).click();
   assert.equal(await page.locator('.newsletter-group').count(), 5);
-  await page.screenshot({ path: '/tmp/signal-v14-desktop.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v14-desktop.png', fullPage: true });
   await filter('TLDR AI').click(); assert.equal(await page.locator('.edition').count(), 1);
   await filter('AlphaSignal').click(); assert.equal(await page.locator('.edition').count(), 2);
   const tldrColour = await filter('TLDR AI').evaluate(node => getComputedStyle(node).backgroundColor);
@@ -40,14 +40,14 @@ try {
   await filter('TLDR Dev').evaluate(node => node.click());
   assert.ok(await page.locator('#source-filters').evaluate(node => node.scrollLeft) > 0, 'Selecting a source must preserve the mobile filter scroll position');
   await filter('TLDR Dev').evaluate(node => node.click());
-  await filter('All').click(); await page.screenshot({ path: '/tmp/signal-v14-mobile.png', fullPage: true });
+  await filter('All').click(); await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v14-mobile.png', fullPage: true });
   await choose('saved'); await page.locator('.edition-title').click();
   await page.locator('#reader-content').getByText('Demo edition.', { exact: true }).waitFor();
   assert.equal(await page.locator('#reader-content .newsletter-section').count(), 2);
   assert.equal(await page.locator('#reader-content .newsletter-section').first().locator('.newsletter-story').count(), 2);
   assert.equal(await page.locator('#reader-content .newsletter-heading a').count(), 3);
   const borders = await page.locator('#reader-content .newsletter-story').first().evaluate(node => getComputedStyle(node).borderLeftWidth); assert.equal(borders, '0px');
-  await page.screenshot({ path: '/tmp/signal-v14-mobile-sections.png' });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v14-mobile-sections.png' });
   await page.locator('#reader-scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
   const close = await page.getByRole('button', { name: 'Close reader' }).boundingBox(); assert.ok(close.y + close.height <= 844);
   await page.touchscreen.tap(5, 400); await page.waitForFunction(() => !document.querySelector('#reader-dialog').open);
@@ -72,8 +72,8 @@ try {
   assert.match(safety.text, /<img/); assert.equal(safety.article[0].url, 'https://example.com/news');
   assert.deepEqual(safety.sections, [{ title: 'Headlines & Launches', stories: 1 }, { title: 'Deep Dives & Analysis', stories: 1 }, { title: 'Engineering & Research', stories: 1 }]);
   assert.equal(safety.footerStories, 0);
-  // Filters are independent of report generation; fetching later Gmail pages
-  // discovers new newsletter names without resetting a current selection.
+  // Initial collection discovers providers across every recent page. Loading
+  // older pages does not reset a current source selection.
   const gmailContext = await browser.newContext({ viewport: { width: 390, height: 844 } }); const gmailPage = await gmailContext.newPage();
   gmailPage.on('pageerror', error => errors.push(error.message));
   await gmailPage.addInitScript(() => {
@@ -93,7 +93,9 @@ try {
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
   });
   await gmailPage.goto(base); await gmailPage.getByRole('button', { name: 'Connect Gmail', exact: true }).click();
-  await gmailPage.locator('.edition').waitFor();
+  await gmailPage.locator('.edition').first().waitFor();
+  await gmailPage.waitForFunction(() => document.querySelector('#refresh-button').textContent === 'Refresh');
+  assert.equal(await gmailPage.locator('.edition').count(), 2);
   const chip = name => gmailPage.locator('#source-filters .filter-chip').filter({ hasText: name });
   const beforeFilter = requests; await chip('TLDR AI').click(); assert.equal(requests, beforeFilter);
   await gmailPage.getByRole('button', { name: 'Load more newsletters' }).click(); await chip('New Research Weekly').waitFor();
