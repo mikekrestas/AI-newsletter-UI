@@ -43,7 +43,20 @@ async function tokenRequest(env, params) {
     method: 'POST', body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, ...params }), signal: AbortSignal.timeout(15000)
   });
   let data; try { data = await result.json(); } catch { throw new AuthError('Google could not refresh sign-in. Try again.', 502); }
-  if (!result.ok) throw new AuthError(data.error === 'invalid_grant' ? 'Google access was revoked or expired. Connect Gmail again.' : 'Google could not refresh sign-in. Try again.', data.error === 'invalid_grant' ? 401 : 502);
+  if (!result.ok) {
+    // Map Google's documented codes rather than returning its raw response,
+    // which must never expose credentials or provider error descriptions.
+    const errors = {
+      invalid_client: ['Google rejected the OAuth client credentials (invalid_client). Match GOOGLE_CLIENT_ID in wrangler.json with the Google Web application that supplied GOOGLE_CLIENT_SECRET, then update that Worker secret from the same repository folder.', 503],
+      unauthorized_client: ['This OAuth client cannot use this sign-in flow (unauthorized_client). Use a Google Web application client and its matching client secret.', 503],
+      redirect_uri_mismatch: ['Google rejected the callback address (redirect_uri_mismatch). Register this website\u2019s exact /api/auth/callback URL as an Authorised redirect URI on the matching Google client.', 400],
+      invalid_grant: [params.grant_type === 'authorization_code' ? 'Google rejected the login code (invalid_grant). Open Signal and start a new Connect Gmail sign-in; do not refresh the callback page.' : 'Google access was revoked or expired (invalid_grant). Connect Gmail again.', 401],
+      invalid_request: ['Google rejected the token exchange (invalid_request). Check the Google Web application configuration and try a fresh Connect Gmail sign-in.', 400],
+      access_denied: ['Google denied sign-in (access_denied). Check the OAuth app\u2019s audience and approve read-only Gmail access.', 403]
+    };
+    const failure = Object.hasOwn(errors, data.error) ? errors[data.error] : ['Google could not complete the token exchange. Try a fresh Connect Gmail sign-in.', 502];
+    throw new AuthError(...failure);
+  }
   if (!data.access_token || !Number.isFinite(Number(data.expires_in))) throw new AuthError('Google returned an incomplete sign-in response.', 502);
   return data;
 }

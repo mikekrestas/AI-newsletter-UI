@@ -9,13 +9,14 @@ function fixture() {
     get: async key => data.has(key) ? JSON.parse(data.get(key)) : null,
     put: async (key, value, options) => { data.set(key, value); writes.push({ key, value, options }); }, delete: async key => { data.delete(key); }
   }, AI: { run: async () => ({ response: '* A finished report.' }) }, ASSETS: { fetch: async () => new Response('app') } };
-  let email = 'owner@example.com', expires = 3600, revoked = false, grantedScope = scope, refreshed = 0;
+  let email = 'owner@example.com', expires = 3600, revoked = false, grantedScope = scope, refreshed = 0, tokenError = null;
   const original = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, options });
     if (url === 'https://oauth2.googleapis.com/token') {
       const params = new URLSearchParams(options.body);
       assert.equal(params.get('client_secret'), env.GOOGLE_CLIENT_SECRET);
+      if (tokenError) return Response.json({ error: tokenError, error_description: 'DO-NOT-EXPOSE-private-refresh-token-test-client-secret' }, { status: 400 });
       if (params.get('grant_type') === 'refresh_token') {
         await new Promise(resolve => setTimeout(resolve, 20));
         if (revoked) return Response.json({ error: 'invalid_grant' }, { status: 400 });
@@ -45,8 +46,28 @@ function fixture() {
     const cookie = result.headers.getSetCookie().find(value => value.startsWith('__Host-signal_session='))?.split(';')[0];
     return { result, cookie, pending };
   }
-  return { env, data, writes, calls, request, login, start, get refreshed() { return refreshed; }, expire: () => { expires = -1; }, revoke: () => { revoked = true; }, wrongOwner: () => { email = 'other@example.com'; }, removeScope: () => { grantedScope = 'openid'; }, restore: () => { globalThis.fetch = original; } };
+  return { env, data, writes, calls, request, login, start, get refreshed() { return refreshed; }, expire: () => { expires = -1; }, revoke: () => { revoked = true; }, wrongOwner: () => { email = 'other@example.com'; }, removeScope: () => { grantedScope = 'openid'; }, failToken: code => { tokenError = code; }, restore: () => { globalThis.fetch = original; } };
 }
+await test('Google token failures explain client, callback and login-code errors without exposing provider details', async () => {
+  const cases = [
+    ['invalid_client', 503, /GOOGLE_CLIENT_ID.*GOOGLE_CLIENT_SECRET/],
+    ['unauthorized_client', 503, /Web application client/],
+    ['redirect_uri_mismatch', 400, /Authorised redirect URI/],
+    ['invalid_grant', 401, /login code.*start a new Connect Gmail/],
+    ['invalid_request', 400, /token exchange/],
+    ['access_denied', 403, /audience/],
+    ['unknown_provider_error', 502, /token exchange/],
+    ['toString', 502, /token exchange/]
+  ];
+  for (const [code, status, message] of cases) {
+    const f = fixture(); try {
+      f.failToken(code); const { result } = await f.login();
+      assert.equal(result.status, status); const body = await result.text(); assert.match(body, message);
+      assert.doesNotMatch(body, /DO-NOT-EXPOSE|test-client-secret|private-refresh-token/);
+      assert.equal([...f.data.keys()].filter(key => key.startsWith('session:')).length, 0);
+    } finally { f.restore(); }
+  }
+});
 await test('OAuth session survives repeated visits without exposing Google credentials', async () => {
   const f = fixture(); try {
     const { result, cookie, pending } = await f.login(); assert.equal(result.status, 303); assert.equal(result.headers.get('Location'), '/');
