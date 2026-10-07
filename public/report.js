@@ -54,7 +54,9 @@ export function renderReport(report, openEdition) {
       const content = document.createElement('div');
       const title = document.createElement('h3'); title.className = 'brief-headline'; title.textContent = visibleText(highlight.headline);
       const detail = document.createElement('p'); detail.textContent = visibleText(highlight.detail);
-      const source = document.createElement('span'); source.className = 'brief-origin'; source.textContent = reference.source + ' · ' + new URL(url).hostname.replace(/^www\./, '') + ' ↗';
+      const source = document.createElement('span'); source.className = 'brief-origin'; source.textContent = reference.source + ' · ' + new URL(url).hostname.replace(/^www\./, '');
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); icon.setAttribute('viewBox', '0 0 16 16'); icon.setAttribute('aria-hidden', 'true'); icon.classList.add('external-icon');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', 'M5 3h8v8M13 3 3 13'); icon.append(path); source.append(icon);
       content.append(title, detail, source); link.append(number, content); item.append(link); list.append(item);
     }
     if (!list.children.length) {

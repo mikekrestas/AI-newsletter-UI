@@ -124,6 +124,7 @@ dialog.reader-dialog[open] { display: flex; align-items: center; justify-content
 .brief-headline { color: var(--green); font-size: 17px; line-height: 1.45; margin: 0 0 7px; font-weight: 700; }
 .brief-story-link:hover .brief-headline { text-decoration: underline; text-underline-offset: 3px; }
 .brief-origin { display: block; color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 12px; overflow-wrap: anywhere; }
+.external-icon { display: inline-block; width: 12px; height: 12px; margin-left: 6px; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.5; }
 .brief-quiet-day { padding: 20px; background: var(--canvas); border-radius: 10px; color: var(--muted); line-height: 1.7; }
 .brief-update-note { margin-top: 16px; padding: 12px 14px; border: 1px solid #e4d2a7; border-radius: 10px; background: #fffcf3; color: #745519; font-size: 13px; line-height: 1.65; }
 .primary-source::after { content: ''; position: absolute; inset: 0; border-radius: 12px; }

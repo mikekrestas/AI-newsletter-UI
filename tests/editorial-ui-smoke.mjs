@@ -31,7 +31,8 @@ try {
     document.querySelector('#brief-text').replaceChildren(renderReport(report, () => { window.openedEdition = true; }));
   }, report);
   assert.equal(await page.locator('.brief-headline').count(), 2);
-  assert.equal(await page.locator('.brief-origin').first().innerText(), 'TLDR AI · example.com ↗');
+  assert.equal(await page.locator('.brief-origin').first().innerText(), 'TLDR AI · example.com');
+  assert.equal(await page.locator('.brief-origin .external-icon').count(), 2);
   assert.match(await page.locator('.brief-item').first().innerText(), /unreleased internal model.*4,000/s);
   // Tap the card margin, not the headline: it must open the exact article URL.
   await page.locator('.brief-item').first().scrollIntoViewIfNeeded();
