@@ -1,5 +1,5 @@
 export const MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
-export const SUMMARY_VERSION = 'signal-7';
+export const SUMMARY_VERSION = 'signal-8';
 export function buildReferences(sources) {
   const references = [], urls = new Set(); let articleNumber = 0;
   for (const [index, source] of sources.entries()) {
@@ -12,12 +12,12 @@ export function buildReferences(sources) {
   }
   return references;
 }
-function referenceList(references) {
+function referenceList(references, limit = 9000) {
   const lines = references.map(ref => `${ref.key}: ${ref.title.slice(0, 160)} (${ref.source})`);
   // Keep the reference catalogue inside the small model's context as more
   // newsletters arrive. Shortening a title preserves every supplied key.
-  if (lines.join('\n').length <= 9000) return lines.join('\n');
-  const lineLimit = Math.floor(9000 / lines.length) - 1;
+  if (lines.join('\n').length <= limit) return lines.join('\n');
+  const lineLimit = Math.floor(limit / lines.length) - 1;
   return lines.map(line => line.slice(0, lineLimit)).join('\n');
 }
 export function chunks(text, limit = 4500) {
@@ -60,6 +60,73 @@ export function validateHighlights(output, references) {
   if (words > 180) throw new Error('Keep the entire brief within 180 words, removing less important stories rather than cutting sentences.');
   return highlights;
 }
+
+// Models sometimes wrap JSON in commentary, or run out of tokens after writing
+// several complete objects. Recover complete JSON objects only; never eval text
+// or guess the contents of an unfinished string.
+function modelObjects(output) {
+  const objects = [], starts = []; let quoted = false, escaped = false;
+  for (let i = 0; i < output.length; i++) {
+    const character = output[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') quoted = false;
+    } else if (character === '"') quoted = true;
+    else if (character === '{') starts.push(i);
+    else if (character === '}' && starts.length) {
+      const start = starts.pop();
+      try { objects.push(JSON.parse(output.slice(start, i + 1))); } catch { /* Not complete JSON. */ }
+    }
+  }
+  return objects;
+}
+function readDraft(output, references) {
+  const objects = modelObjects(output);
+  const envelope = objects.findLast(object => Array.isArray(object.highlights));
+  const items = envelope?.highlights || objects.filter(object => Object.hasOwn(object, 'reference') && Object.hasOwn(object, 'headline'));
+  const highlights = [], errors = []; let words = 0;
+  for (const item of items) {
+    try {
+      // Normalise cosmetic differences without weakening reference or fragment
+      // checks. A complete sentence without its final full stop is still usable.
+      const reference = typeof item?.reference === 'string' ? item.reference.trim().match(/^[\[(]?\s*(A\d+)\s*[\])]?$/)?.[1] : null;
+      const detail = cleanText(item?.detail);
+      const headline = cleanText(item?.headline).replace(/^\*\*|\*\*$/g, '');
+      const story = validateHighlights(JSON.stringify({ highlights: [{ headline, detail: /[.!?]["”')]*$/.test(detail) ? detail : detail + '.', reference }] }), references)[0];
+      const nextWords = (story.headline + ' ' + story.detail).split(/\s+/).length;
+      // Remove whole lower-ranked stories, never cut a sentence to meet limits.
+      if (highlights.length === 6 || words + nextWords > 180 || highlights.some(existing => existing.reference === story.reference || existing.headline.toLowerCase() === story.headline.toLowerCase())) continue;
+      highlights.push(story); words += nextWords;
+    } catch (error) { errors.push(error.message); }
+  }
+  return { highlights, errors, quiet: Boolean(envelope && items.length === 0), malformed: !envelope };
+}
+function selectedReferences(output, references) {
+  const keys = new Set(String(output).match(/\bA\d+\b/g) || []);
+  const articles = new Map(references.filter(reference => reference.type === 'article').map(reference => [reference.key, reference]));
+  return [...keys].map(key => articles.get(key)).filter(Boolean);
+}
+function sentenceCount(text) {
+  return [...new Intl.Segmenter('en', { granularity: 'sentence' }).segment(text)].filter(segment => segment.segment.trim()).length;
+}
+export function validateOverview(output) {
+  const text = String(output || '').trim().replace(/^```(?:text)?\s*|\s*```$/g, '').replace(/\s+/g, ' ');
+  if (!text || text.length > 600 || text.split(/\s+/).length > 80 || sentenceCount(text) > 3 ||
+      !/[.!?]["”')]*$/.test(text) || /\b[AE]\d+\b|https?:\/\/|<[!/a-z]|\[[^\]]+\]\(|^\s*[#*•]|\b(?:this|last|next|the) week\b/i.test(text) ||
+      /\b(?:of|and|or|for|with|to|from|the|a|an|by|on|in|because|about|using)[.!?]["”')]*$/i.test(text)) throw new Error('Use at most three complete sentences about the selected day, without citations or markup.');
+  return text;
+}
+function headlineOverview(highlights, unlinkedEditionCount) {
+  if (!highlights.length) return unlinkedEditionCount
+    ? 'Your newsletters did not yield linked highlights for this day. You can read the full editions below.'
+    : 'No major AI developments met the selection criteria in your newsletters for this day.';
+  // Original headlines provide an honest overview when the optional prose call
+  // is malformed. No industry trend or practical consequence is invented.
+  const titles = highlights.slice(0, 2).map(item => item.headline.replace(/[.!?]+$/, ''));
+  const text = `Today’s selected headlines: ${titles.join('; ')}.${highlights.length > 2 ? ' The highlights below cover the remaining selected developments.' : ''}`;
+  try { return validateOverview(text); } catch { return 'Your selected AI developments are collected below, with links to their original articles.'; }
+}
 export async function generateSummary(sources, ai, signal, references = buildReferences(sources), onProgress = () => {}) {
   const providers = new Map();
   let sectionCount = 0;
@@ -72,15 +139,18 @@ export async function generateSummary(sources, ai, signal, references = buildRef
   }
   if (sectionCount > 28) throw new Error('This day is too large for one free report (more than 28 text sections). No partial report was created. Narrow your newsletter label and try again.');
   let calls = 0;
-  async function summarize(text, instruction, maxTokens = 700) {
+  async function summarize(text, instruction, maxTokens = 700, candidate = false) {
     signal?.throwIfAborted();
+    // Reserve final writing, review, then either reference-only selection or an
+    // overview. These fit within the existing total ceiling of 36 calls.
+    if (candidate && calls >= 33) throw new Error('This report exceeded the free processing limit. No partial report was created.');
     if (++calls > 36) throw new Error('This report exceeded the free processing limit. No partial report was created.');
     const result = await ai.run(MODEL, {
       messages: [{ role: 'system', content: instructions + selection + instruction }, { role: 'user', content: text }],
       max_tokens: maxTokens, temperature: 0.1
     });
     signal?.throwIfAborted();
-    if (typeof result?.response !== 'string' || !result.response.trim() || result.response.length > 8000) throw new Error('Cloudflare AI did not return a usable report. Try again.');
+    if (typeof result?.response !== 'string' || (candidate && !result.response.trim()) || result.response.length > 8000) throw new Error('Cloudflare AI did not return a usable report. Try again.');
     return result.response.trim();
   }
   // Every full section is read first. Each provider then receives the same
@@ -95,14 +165,14 @@ export async function generateSummary(sources, ai, signal, references = buildRef
     let notes = [];
     for (const part of parts) {
       onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Evaluating ${provider}… section ${evaluated + 1} of ${sectionCount}` });
-      notes.push(await summarize(part, candidateInstruction)); evaluated++;
+      notes.push(await summarize(part, candidateInstruction, 700, true)); evaluated++;
       onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Evaluated ${evaluated} of ${sectionCount} newsletter sections` });
     }
     for (let pass = 0; notes.join('\n').length > budget && pass < 4; pass++) {
       const combined = notes.join('\n');
       const next = [];
       onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Comparing and consolidating ${provider} stories…` });
-      for (const part of chunks(combined)) next.push(await summarize(part, compactInstruction, Math.max(60, Math.floor(budget / 5))));
+      for (const part of chunks(combined)) next.push(await summarize(part, compactInstruction, Math.max(60, Math.floor(budget / 5)), true));
       if (next.join('\n').length >= combined.length) throw new Error('The AI could not condense this day. No partial report was created.');
       notes = next;
     }
@@ -113,19 +183,64 @@ export async function generateSummary(sources, ai, signal, references = buildRef
   // Keep the complete bounded catalogue: a candidate extractor dropping a key
   // must not prevent the final editor from matching the actual article title.
   const relevant = references;
-  const material = `Available source references:\n${referenceList(relevant)}\n\nEqually budgeted provider candidates:\n${combined}`;
+  const material = `Available source references:\n${referenceList(relevant, 7000)}\n\nEqually budgeted provider candidates:\n${combined}`;
   const finalInstruction = ' Return ONLY a JSON object with this shape: {"highlights":[{"headline":"A specific, plain-language news headline","detail":"One or two complete sentences explaining the development and its consequence.","reference":"A1"}]}. Select zero to six of the biggest independent AI developments across the WHOLE day, ranked by material importance. Use fewer stories when there is little important news, and an empty array if none qualify. At most 180 words across all headlines and details. Each headline must identify the actual development; each detail must stand alone with its subject clear. Attach experiment details, numbers and caveats to the SAME story, never as an extra bullet. For example, releasing maths manuscripts and the model\u2019s test workload are one story, not two. Include unique meaningful news from other providers; do not favour the first/longest newsletter or force a provider quota. Each reference MUST be an existing A article key that actually supports that story. E edition keys are not article links and cannot be used. Never invent a URL or infer an unrelated reference. Keep all source codes exclusively in the reference field, never in visible headline/detail. No Markdown, HTML, citations, headings or evaluator commentary.';
   onProgress({ stage: 'reporting', message: 'Writing the daily report and linking its sources…' });
-  let draft = await summarize(material, finalInstruction, 1000), highlights, invalid;
-  try { highlights = validateHighlights(draft, relevant); } catch (error) { invalid = error.message; }
+  let draft = await summarize(material, finalInstruction, 1200), result = readDraft(draft, relevant);
   // A lopsided first draft gets one editorial review using the same complete,
   // balanced candidates. This is not a rule to manufacture news per provider.
-  const needsCoverageReview = providers.size > 1 && highlights && citedProviders(highlights, references).size <= 1;
-  if (invalid || needsCoverageReview) {
+  const needsCoverageReview = providers.size > 1 && citedProviders(result.highlights, references).size <= 1;
+  if (result.errors.length || result.malformed || needsCoverageReview) {
     onProgress({ stage: 'reporting', message: 'Checking complete stories, article links and the other newsletters…' });
-    draft = await summarize(material + '\n\nFirst draft for review:\n' + draft, finalInstruction + ' EDITORIAL REVIEW: ' + (invalid ? 'Correct this validation failure: ' + invalid : 'Re-evaluate the other providers\u2019 independent major/meaningful developments and replace lower-value items if appropriate. Do not force citations for duplicate/routine news.'), 1000);
-    try { highlights = validateHighlights(draft, relevant); } catch (error) { throw new Error('The AI could not produce a usable report with complete stories and verified article links. No partial report was saved. Try again.'); }
+    // Do not append an entire invalid draft to an already-large prompt. Review
+    // the balanced facts and a compact description of the actual failure.
+    const review = await summarize(material, finalInstruction + ' EDITORIAL REVIEW: ' +
+      (result.errors.length ? 'Correct these validation failures: ' + [...new Set(result.errors)].join(' ') : result.malformed ? 'The previous response was not a complete JSON highlights object. Use the exact schema; keep all sentences complete.' : 'Re-evaluate the other providers\u2019 independent major/meaningful developments. Do not force citations for duplicate/routine news.'), 1200);
+    const repaired = readDraft(review, relevant);
+    if (repaired.highlights.length || repaired.quiet) result = repaired;
+    draft += '\n' + review;
   }
-  return { highlights, editorialVersion: SUMMARY_VERSION, unlinkedEditionCount: sources.filter(source => !(source.articles || []).length).length,
+  let highlights = result.highlights, generationMode = 'ai';
+  const unlinkedEditionCount = sources.filter(source => !(source.articles || []).length).length;
+  if (!highlights.length && !result.quiet) {
+    onProgress({ stage: 'reporting', message: 'Building a linked digest from the original newsletter headlines…' });
+    let selected = selectedReferences(draft, relevant);
+    if (!selected.length && relevant.some(reference => reference.type === 'article')) {
+      const choice = await summarize(material, ' Select up to six independent major/meaningful stories. Return ONLY a JSON object with this shape: {"references":["A1","A2"]}. Use only known A article keys, in importance order. No rewritten headlines or explanations. Use an empty array if nothing is newsworthy.', 150);
+      selected = selectedReferences(choice, relevant);
+      if (!selected.length && modelObjects(choice).some(object => Array.isArray(object.references) && object.references.length === 0)) result.quiet = true;
+    }
+    if (selected.length) {
+      generationMode = 'source-headlines';
+      // The fallback quotes supplied article titles rather than pretending an
+      // unfinished model explanation is a complete, verified news story.
+      let words = 0;
+      highlights = selected.slice(0, 6).flatMap(reference => {
+        const headline = cleanText(reference.title).replace(/\b[AE]\d+\b/g, '').trim();
+        const count = headline.split(/\s+/).length;
+        if (!headline || words + count > 180) return [];
+        words += count;
+        return [{ headline, detail: '', reference: reference.key }];
+      });
+    } else if (relevant.some(reference => reference.type === 'article') && !result.quiet) {
+      throw new Error('The AI returned no usable article references. No report was saved. Try another date or retry later.');
+    }
+  }
+  let overview = headlineOverview(highlights, unlinkedEditionCount);
+  if (highlights.length && generationMode === 'ai' && calls < 36) {
+    onProgress({ stage: 'reporting', message: 'Writing the day’s opening overview from the selected highlights…' });
+    // This call receives only the stories actually displayed, not rejected
+    // candidates. Bad overview formatting must not discard a usable report.
+    try {
+      const prose = await summarize(JSON.stringify(highlights.map(({ headline, detail }) => ({ headline, detail }))),
+        ' Write ONLY a short opening paragraph for this personal daily brief: preferably TWO sentences, maximum THREE sentences and 80 words. Explain the main AI themes for THIS DAY and their practical significance for the reader using only the supplied highlights. Do not claim to describe the whole industry beyond these newsletters. Do not mention a week, add facts/products/numbers, citations, a heading, bullet points or JSON. Avoid hype and evaluator commentary.', 180);
+      overview = validateOverview(prose);
+    } catch (error) {
+      // Cancellation and quota/processing stops still abort the request. A
+      // malformed/unavailable optional prose response does not lose good news.
+      if (signal?.aborted || error.name === 'AbortError' || /quota|neuron|limit|429|10000|daily allocation/i.test(error.message)) throw error;
+    }
+  }
+  return { overview, highlights, generationMode, editorialVersion: SUMMARY_VERSION, unlinkedEditionCount,
     summary: highlights.map(item => `* [${item.headline}](${item.reference}) ${item.detail}`).join('\n') };
 }

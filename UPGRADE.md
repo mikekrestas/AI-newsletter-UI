@@ -1,6 +1,16 @@
 # Update your existing hosted Signal app through Git
 
-Signal 1.7 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+Signal is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+
+## Release 1.8
+
+Daily Brief no longer rejects an entire draft because one item is badly formatted. It recovers complete JSON stories, normalises harmless wrappers/punctuation and removes invalid links/fragments individually. One editorial review retains usable stories if the replacement is malformed. Review prompts stay bounded instead of appending the whole invalid draft.
+
+If the model still cannot write usable explanations, Signal shows a clearly labelled digest of selected original newsletter headlines with their real article links. **Retry AI writing** can explicitly replace that saved headline digest; reading it makes no AI call. Unavailable article references, actual quota errors, collection failures and cancellation still stop safely.
+
+New reports open with **Today, at a glance**: preferably two sentences, maximum three and 80 words, about the day's themes drawn only from the displayed highlights. An invalid/unavailable optional overview uses a grounded headline overview rather than discarding the report. No paid model or service was added; the existing 36-call ceiling includes review/overview work.
+
+After merge, run the normal pull/install/deploy commands below and verify **Signal 1.8** in the phone footer. Existing Google configuration, secrets and sessions need no changes. Regenerate old briefs to get the overview and updated writing pipeline. Production AI output still needs review against your real newsletters after deployment.
 
 ## Release 1.7
 

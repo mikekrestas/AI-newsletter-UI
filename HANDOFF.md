@@ -1,6 +1,21 @@
 # Signal: chat and project handoff
 
-Snapshot: 7 October 2026. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
+Original snapshot: 7 October 2026; follow-up below dated 11 October. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
+
+## 11 October follow-up: Daily Brief reliability and opening overview
+
+The owner reported that no daily brief had generated successfully. Their phone screenshot showed the Signal 1.7 error “The AI could not produce a usable report with complete stories and verified article links” at the Reporting stage. That message identifies the final draft/repair validation path; the actual live model responses were not available for inspection. The owner also requested a reader-focused opening overview: preferably one or two sentences, maximum three, describing that day's AI themes from the linked highlights below (they explicitly corrected “week” to “day”).
+
+Main was checked at 15e35bcc849612c228f0d51415e3b6294f319e1c, containing the merged documentation and Signal 1.7. Proposed Signal 1.8 changes are on codex/reliable-brief-and-day-overview; check the corresponding PR and current main/deployment before assuming it has shipped.
+
+- Recover complete stories from wrapped/token-truncated JSON, normalise cosmetic punctuation/reference brackets and validate items individually. Remove broken items or whole lower-ranked stories to meet limits instead of discarding usable news or cutting sentences.
+- Keep one bounded editorial review and retain the valid first-draft stories if its replacement is unusable. The review no longer appends the full invalid draft to a large prompt.
+- If model explanations remain unusable, show a clearly labelled digest of selected original article headlines with known article links, without fabricated details. A reference-only selection can rescue an uncited draft. Unknown/unavailable references still return an error.
+- Cache that headline digest normally, without AI spending on reads. Retry AI writing explicitly bypasses only a saved headline digest; successful unchanged briefs still use cache.
+- Add Today, at a glance above the linked highlights. Its optional prose call sees only retained highlights and is limited to three sentences/80 words. Invalid/unavailable optional prose falls back to a grounded headline overview. Cancellation and real quota/processing failures still abort without saving.
+- Keep the existing free model, owner/session protection and 36-call ceiling, reserving up to three calls for final writing/review and selection or overview. Version browser modules/styles/editorial cache to release 1.8/signal-8. Constrain the date field to its phone container.
+
+Syntax checks, 27 backend tests, the existing five Chromium suites, a new Worker-to-browser reliability suite and a Worker deployment dry run passed. Google/AI responses were mocked; the new browser test exercises the real Worker streaming/cache/validation code. Actual Cloudflare AI output and the owner's physical phone browser remain to be checked after deployment. No production deployment or auth/configuration change was made. Normal release remains merge, git pull, npm install, npm run deploy, then verify Signal 1.8 and regenerate older reports.
 
 ## Current starting point
 

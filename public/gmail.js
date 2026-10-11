@@ -1,4 +1,4 @@
-import { newsletterName } from './sources.js?v=7';
+import { newsletterName } from './sources.js?v=8';
 export const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export class GmailError extends Error { constructor(message, status) { super(message); this.status = status; } }
 export class Gmail {
@@ -17,12 +17,12 @@ export class Gmail {
     return response.json();
   }
   async profile() { return this.request('profile'); }
-  async hostedBrief(date, sources, signal, onProgress) {
+  async hostedBrief(date, sources, signal, onProgress, retryWriting = false) {
     const response = await fetch('/api/brief' + (sources ? '' : '?date=' + encodeURIComponent(date)), {
       method: sources ? 'POST' : 'GET',
       headers: { ...(this.persistent ? {} : { Authorization: 'Bearer ' + this.token }), ...(sources ? { 'Content-Type': 'application/json' } : {}), ...(onProgress ? { Accept: 'text/event-stream' } : {}) },
       credentials: 'same-origin',
-      ...(sources ? { body: JSON.stringify({ date, sources }) } : {}),
+      ...(sources ? { body: JSON.stringify({ date, sources, ...(retryWriting ? { retryWriting: true } : {}) }) } : {}),
       signal: signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal
     });
     if (response.ok && response.headers.get('Content-Type')?.includes('text/event-stream')) {

@@ -39,7 +39,9 @@ These instructions apply throughout this repository. Keep lasting project rules 
 - Keep supporting details with their parent story. Preserve caveats such as internal, unreleased or preliminary; write complete, concise explanations.
 - Each new highlight must resolve to its specific article URL from supplied references. Never invent a link or substitute an unrelated article.
 - Do not display internal A/E reference keys. Keep the entire highlight card accessible and clickable, with a green article headline and readable explanation.
-- Treat model output as untrusted. Validate structure, references, length, duplicates and obvious fragments before caching; failed repairs must not become saved reports.
+- Begin each new brief with a short overview of the selected day's themes: preferably two sentences, never more than three. Base it only on the highlights actually shown, without outside facts or weekly framing.
+- Treat model output as untrusted. Validate each rewritten highlight's structure, references, length, duplicates and obvious fragments before caching. Recover complete valid stories without retaining invalid prose; on formatting failure a clearly labelled original-headline digest may use known article references. Never fabricate explanations or links to make generation succeed.
+- Preserve the explicit Retry AI writing action for headline digests. Reading a saved fallback or an unchanged successful brief must not automatically trigger AI spending.
 - Flag editions without extractable article URLs and keep them readable in Source editions. Allow quiet days with fewer or no significant highlights.
 - Preserve explicit quota/request limits, cache fingerprints and legacy regeneration notices. Opening a saved report must not automatically spend AI quota.
 - Structural validation does not independently fact-check news or guarantee importance judgements. Describe verification honestly.
