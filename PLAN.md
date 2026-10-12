@@ -34,7 +34,7 @@ Multiple users, scheduled generation, full reading-progress sync, topic filters,
 
 ## Owner update
 
-The app is deployed at https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/. The owner holds the existing authenticated Cloudflare setup and Google client ID. The repository ignores wrangler.json and tracks a placeholder wrangler.example.json instead. The owner copies the existing configuration once into a Git clone, then uses git pull, npm install and npm run deploy. See UPGRADE.md. The existing Google origin remains valid; persistent sign-in additionally requires the /api/auth/callback redirect URI and the one-time setup:session script. Google Testing offline grants normally expire after seven days, so lasting access requires Production OAuth status and a new connection. The Google client secret and encryption key stay out of Git.
+The app is deployed at https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/. The owner holds the existing authenticated Cloudflare setup and Google client ID. The repository ignores wrangler.json and tracks a placeholder wrangler.example.json instead. Manual releases use the configured Git clone. The authorised GitHub Deploy Signal workflow deploys tested main pushes after two Cloudflare secrets are added; it reads live bindings, keeps variables/secrets and does not require copying local configuration. See DEPLOYMENT.md and UPGRADE.md. The existing Google origin remains valid; persistent sign-in additionally requires the /api/auth/callback redirect URI and the one-time setup:session script. Google Testing offline grants normally expire after seven days, so lasting access requires Production OAuth status and a new connection. The Google client secret and encryption key stay out of Git.
 
 ## Verification
 

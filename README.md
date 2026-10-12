@@ -4,6 +4,8 @@ Signal 1.8 reads newsletters from your **AI Newsletters** Gmail label and genera
 
 Already deployed? Follow [UPGRADE.md](UPGRADE.md) to move to Git updates while preserving your existing `wrangler.json`, Google client ID and report cache. The repository tracks `wrangler.example.json`; your active deployment configuration stays local and ignored by Git.
 
+For releases from your phone, follow [DEPLOYMENT.md](DEPLOYMENT.md): add two Cloudflare secrets in GitHub once, then merging to main runs checks and deploys automatically using the live Worker's existing configuration.
+
 ## Publish to your free Cloudflare account
 
 1. Clone this repository and open a terminal in its folder, which contains `package.json`. First-time hosted setup creates `wrangler.json` from `wrangler.example.json`; for an existing deployment, copy your existing `wrangler.json` into the clone and follow UPGRADE.md.
@@ -86,7 +88,7 @@ Persistent sign-in automatically refreshes expired access tokens. Temporary popu
 
 ## Later updates
 
-After merging a pull request, run `git pull`, `npm install` and `npm run deploy` in your repository clone. The ignored `wrangler.json` holds your public client ID and KV namespace ID; keep it when updating. Do not replace it with the placeholder example for an existing deployment. No Google origin change is needed if the website URL stays the same. All browser module imports and CSS use the release version as well as cache revalidation. The loaded release appears in the footer on desktop and phone; verify **Signal 1.8** after deploying.
+With [automatic deployments](DEPLOYMENT.md) configured, merging a pull request to main starts **Deploy Signal**; wait for its successful run before checking production. Manual updates remain `git pull`, `npm install` and `npm run deploy` in your configured clone. The ignored `wrangler.json` holds your public client ID and KV namespace ID; keep it when updating. Do not replace it with the placeholder example for an existing deployment. No Google origin change is needed if the website URL stays the same. All browser module imports and CSS use the release version as well as cache revalidation. The loaded release appears in the footer on desktop and phone; verify **Signal 1.8** after deploying.
 
 ## Local preview and verification
 

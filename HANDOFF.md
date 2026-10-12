@@ -1,6 +1,16 @@
 # Signal: chat and project handoff
 
-Original snapshot: 7 October 2026; follow-up below dated 11 October. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
+Original snapshot: 7 October 2026; follow-ups below dated 11/12 October. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
+
+## 12 October follow-up: mobile identity and automatic deployment
+
+PR #8 remains the review branch for Signal 1.8. The owner additionally requested iOS Home Screen icons, the name Signal AI and matching browser tab identity. The PR now includes an opaque Apple touch icon, 192/512px launcher icons and a standalone manifest, matching SVG/16/32px browser favicons and Signal AI in page/iOS/manifest titles. Served metadata, image dimensions/MIME types, opaque/maskable icon geometry and Worker dry runs were checked. Existing iOS shortcuts may need removing/re-adding after deployment to update their cached name/icon. Physical iOS installation was not tested.
+
+The owner then explicitly requested automatic deployment after merging to main because they are travelling with only their phone. This supersedes the earlier manual-only release decision. The proposed Deploy Signal GitHub workflow runs main pushes/manual main dispatches after checks, serialises production runs and gives Cloudflare credentials only to the deployment step. It uses existing pinned Wrangler, with no new paid service or dependency.
+
+The owner must add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID directly to GitHub Actions repository secrets (see DEPLOYMENT.md). The helper reads the existing Worker settings, validates owner/client/bindings/secret names, reuses the live REPORTS namespace, keeps server variables and relies on Wrangler's unchanged-secret inheritance. It writes/deletes an ignored temporary config without overwriting the owner's wrangler.json or copying Google secret values. Unsupported live bindings stop deployment. Tests use simulated Cloudflare settings; actual credential readiness and a successful live automatic release still need verification after the owner's setup/main merge. PR approval alone does not release; a successful Deploy Signal run does. Manual PC deployment remains available.
+
+The agent's workspace has no active Cloudflare login or owner wrangler.json. Never ask the owner to paste the API token or Google/session secrets into chat. The GitHub connector cannot administer repository secrets; the owner uses GitHub's settings page from their phone.
 
 ## 11 October follow-up: Daily Brief reliability and opening overview
 
@@ -217,4 +227,4 @@ AGENTS.md belongs at the Git repository root beside package.json. Configure the 
 
 Suggested first message:
 
-> This is Signal, my personal free Gmail AI-newsletter app. Read AGENTS.md and HANDOFF.md, then README.md and UPGRADE.md. Use this repository as the source of truth and verify the current main/PR/deployment state because the handoff is dated. Continue via branches and reviewable PRs; I review/merge and deploy unless I explicitly ask you to do so. Preserve my existing Cloudflare configuration and working Gmail sessions. My next task is: [describe the change].
+> This is Signal, my personal free Gmail AI-newsletter app. Read AGENTS.md and HANDOFF.md, then README.md, UPGRADE.md and DEPLOYMENT.md. Use this repository as the source of truth and verify the current main/PR/deployment state because the handoff is dated. Continue via branches and reviewable PRs; I review/merge, and the configured GitHub workflow deploys main after checks. Preserve my existing Cloudflare configuration and working Gmail sessions. My next task is: [describe the change].

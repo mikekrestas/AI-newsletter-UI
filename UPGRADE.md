@@ -2,6 +2,8 @@
 
 Signal is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
 
+For automatic releases after merging to main, follow [DEPLOYMENT.md](DEPLOYMENT.md). It requires only CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in GitHub Actions secrets and reuses the live Worker's configuration. Once configured, you can merge/release from your phone without the PC commands below.
+
 ## Release 1.8
 
 Daily Brief no longer rejects an entire draft because one item is badly formatted. It recovers complete JSON stories, normalises harmless wrappers/punctuation and removes invalid links/fragments individually. One editorial review retains usable stories if the replacement is malformed. Review prompts stay bounded instead of appending the whole invalid draft.
@@ -65,7 +67,7 @@ npm install
 npm run deploy
 ```
 
-Refresh https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/ on your phone after deployment. GitHub changes reach the live site only after deployment; automatic Git-based Cloudflare deployment has not been configured.
+Refresh https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/ on your phone after deployment. If automatic deployment is configured, wait for the **Deploy Signal** GitHub Actions run instead of running the commands above. Without its two secrets, automatic releases fail with setup guidance and manual deployment remains available.
 
 ## Daily brief coverage
 
