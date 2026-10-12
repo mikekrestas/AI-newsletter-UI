@@ -1,4 +1,4 @@
-import { newsletterName } from './sources.js?v=7';
+import { newsletterName } from './sources.js?v=8';
 export const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export class GmailError extends Error { constructor(message, status) { super(message); this.status = status; } }
 export class Gmail {
@@ -9,7 +9,7 @@ export class Gmail {
     for (const [key, value] of Object.entries(params)) {
       for (const item of Array.isArray(value) ? value : [value]) if (item !== undefined) url.searchParams.append(key, item);
     }
-    const response = await fetch(url, { headers: this.persistent ? {} : { Authorization: 'Bearer ' + this.token }, credentials: 'same-origin', signal: this.controller.signal });
+    const response = await fetch(url, { headers: this.persistent ? {} : { Authorization: 'Bearer ' + this.token }, credentials: 'same-origin', cache: 'no-store', signal: this.controller.signal });
     if (!response.ok) {
       const errors = { 401: 'Your Gmail session expired. Connect Gmail again to continue.', 403: 'Google denied Gmail access. Check that the Gmail API is enabled and read-only permission was granted.', 429: 'Gmail is rate-limiting requests. Wait a moment and try again.' };
       throw new GmailError(errors[response.status] || 'Gmail could not load this request. Please try again.', response.status);
@@ -22,6 +22,7 @@ export class Gmail {
       method: sources ? 'POST' : 'GET',
       headers: { ...(this.persistent ? {} : { Authorization: 'Bearer ' + this.token }), ...(sources ? { 'Content-Type': 'application/json' } : {}), ...(onProgress ? { Accept: 'text/event-stream' } : {}) },
       credentials: 'same-origin',
+      cache: 'no-store',
       ...(sources ? { body: JSON.stringify({ date, sources }) } : {}),
       signal: signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal
     });
@@ -65,7 +66,7 @@ export class Gmail {
     const message = await this.request('messages/' + encodeURIComponent(id), { format: 'metadata', metadataHeaders: ['From', 'Subject'] });
     const header = name => message.payload?.headers?.find(h => h.name.toLowerCase() === name)?.value || '';
     const from = header('from');
-    const source = newsletterName(from);
+    const source = newsletterName(from, header('subject'), message.snippet || '');
     return { id: message.id, subject: header('subject') || '(Untitled edition)', source, date: Number(message.internalDate), snippet: message.snippet || '', threadId: message.threadId };
   }
   async body(id) {

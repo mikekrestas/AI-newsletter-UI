@@ -1,4 +1,4 @@
-import { safeUrl } from './reader.js?v=7';
+import { safeUrl } from './reader.js?v=8';
 export const EDITORIAL_VERSION = 'signal-7';
 
 function visibleText(text) {

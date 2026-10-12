@@ -1,6 +1,6 @@
-import { readableContent, extractArticles } from './reader.js?v=7';
-import { dayRange } from './dates.js?v=7';
-export { localDay, dayRange } from './dates.js?v=7';
+import { readableContent, extractArticles } from './reader.js?v=8';
+import { dayRange, localDay } from './dates.js?v=8';
+export { localDay, dayRange } from './dates.js?v=8';
 
 export function newsletterText(body) {
   const fragment = readableContent(body.content, body.html);
@@ -32,16 +32,17 @@ export function chunks(text, limit = 5500) {
   return result;
 }
 
-export async function collectDayMetadata(api, label, date, signal, onProgress = () => {}) {
-  const range = dayRange(date);
-  const ids = new Set(); let pageToken;
+export async function collectMetadata(api, label, range, signal, onProgress = () => {}, limit = 300) {
+  const ids = new Set(), pages = new Set(); let pageToken;
   do {
     signal.throwIfAborted();
     const page = await api.list(label, pageToken, range.query);
     for (const id of page.ids) ids.add(id);
-    if (ids.size > 300) throw new Error('This day has more than 300 emails. Narrow your Gmail newsletter label before generating a brief. No partial report was created.');
+    if (ids.size > limit) throw new Error(`This period has more than ${limit} emails. Narrow your Gmail newsletter label and try again. No partial collection was used.`);
     pageToken = page.nextPage;
-    onProgress(`Finding all newsletters for ${date}… ${ids.size} found`);
+    if (pageToken && pages.has(pageToken)) throw new Error('Gmail repeated a results page. Refresh and try again. No partial collection was used.');
+    if (pageToken) pages.add(pageToken);
+    onProgress(`Finding all newsletters… ${ids.size} found`);
   } while (pageToken);
   const result = []; const all = [...ids];
   for (let i = 0; i < all.length; i += 3) {
@@ -55,6 +56,19 @@ export async function collectDayMetadata(api, label, date, signal, onProgress = 
   }
   signal.throwIfAborted();
   return result.sort((a, b) => a.date - b.date);
+}
+
+export async function collectDayMetadata(api, label, date, signal, onProgress = () => {}) {
+  return collectMetadata(api, label, dayRange(date), signal, onProgress);
+}
+
+export function recentRange(now = new Date()) {
+  const today = localDay(now);
+  const calendar = new Date(today + 'T12:00:00Z');
+  calendar.setUTCDate(calendar.getUTCDate() - 6);
+  const start = dayRange(calendar.toISOString().slice(0, 10)).start;
+  const end = dayRange(today).end;
+  return { start, end, query: `after:${Math.floor(start / 1000) - 1} before:${Math.floor(end / 1000)}` };
 }
 
 export async function collectDay(api, label, date, signal, onProgress = () => {}, onStage = () => {}) {

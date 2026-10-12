@@ -71,7 +71,7 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (url.pathname === '/api/config' && request.method === 'GET') return json({
-        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.7', persistentAuth: sessionConfigured(env)
+        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.8', persistentAuth: sessionConfigured(env)
       });
       if (url.pathname.startsWith('/api/auth/')) return authRoute(request, env);
       if (url.pathname.startsWith('/api/gmail/')) return gmailRoute(request, env);

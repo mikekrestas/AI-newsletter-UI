@@ -1,16 +1,15 @@
-import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=7';
-import { readableContent, decodeEntities, extractArticles } from './reader.js?v=7';
-import { newsletterName, newsletterTone } from './sources.js?v=7';
-import { renderReport, EDITORIAL_VERSION } from './report.js?v=7';
-import { demoEditions } from './demo.js?v=7';
-import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata } from './brief.js?v=7';
-import { showBriefProgress, stopBriefProgress } from './progress.js?v=7';
+import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=8';
+import { readableContent, decodeEntities, extractArticles } from './reader.js?v=8';
+import { newsletterName, newsletterTone } from './sources.js?v=8';
+import { renderReport, EDITORIAL_VERSION } from './report.js?v=8';
+import { demoEditions } from './demo.js?v=8';
+import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata, collectMetadata, recentRange } from './brief.js?v=8';
+import { showBriefProgress, stopBriefProgress } from './progress.js?v=8';
 const $ = id => document.getElementById(id);
-const sevenDays = 7 * 86400000;
 let view = 'catchup', mode = 'welcome', account = '', editions = [], progress = {}, gmail = null, labelId = '', nextPage = null, busy = false, generation = 0, readerRequest = 0, expiresAt = 0;
 let settings = readStorage('signal:settings', { clientId: '', label: 'AI Newsletters' });
 let briefController = null, briefBusy = false, briefNeedsUpdate = false;
-let hosted = false, persistentAuth = false, savedBriefController = null;
+let hosted = false, persistentAuth = false, savedBriefController = null, coverageBusy = false;
 let selectedSources = new Set();
 function readStorage(key, fallback) { try { const value = JSON.parse(localStorage.getItem(key)); return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback; } catch { return fallback; } }
 function notice(message, error = false, undo) {
@@ -26,7 +25,7 @@ function element(tag, className, text) { const node = document.createElement(tag
 function makeButton(text, className, action) { const button = element('button', className, text); button.type = 'button'; button.addEventListener('click', action); return button; }
 function sourceStyle(source) { return /tldr/i.test(source) ? 'source-tldr' : /alpha/i.test(source) ? 'source-alpha' : /dair/i.test(source) ? 'source-dair' : ''; }
 function formatDate(date) { return new Date(date).toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short', year: localDay(new Date(date)).slice(0, 4) === localDay().slice(0, 4) ? undefined : 'numeric' }); }
-function recent(edition) { return edition.date >= Date.now() - sevenDays; }
+function recent(edition) { const range = recentRange(); return edition.date >= range.start && edition.date < range.end; }
 function catchupItems() { return editions.filter(edition => recent(edition) && !state(edition.id).read && !state(edition.id).dismissed); }
 function savedItems() { return editions.filter(edition => state(edition.id).saved); }
 function filterKey() { return 'signal:filters:' + (mode === 'demo' ? 'demo' : account); }
@@ -84,7 +83,7 @@ function render() {
   $('connect-button').textContent = gmail ? 'Disconnect' : settings.clientId && account ? 'Reconnect Gmail' : 'Connect Gmail';
   $('connect-button').classList.toggle('primary', !gmail); $('connect-button').classList.toggle('secondary', Boolean(gmail));
   $('connect-button').disabled = busy;
-  $('refresh-button').disabled = busy || briefBusy || (!gmail && mode !== 'demo'); $('refresh-button').textContent = busy ? 'Loading…' : 'Refresh';
+  $('refresh-button').disabled = busy || coverageBusy || briefBusy || (!gmail && mode !== 'demo'); $('refresh-button').textContent = busy || coverageBusy ? 'Loading…' : 'Refresh';
   $('catchup-count').textContent = catchupItems().length; $('saved-count').textContent = Object.values(progress).filter(item => item.saved).length;
   const descriptions = { brief: ['THE DAY IN A FEW LINES', 'Daily brief', 'One report from all your newsletters received that day.'], catchup: ['A LITTLE LESS NOISE', 'Catch up', 'Your last seven days. Older editions can wait.'], saved: ['WORTH COMING BACK TO', 'Saved', 'The editions you chose to keep.'], archive: ['THERE WHEN YOU NEED IT', 'Archive', 'All loaded editions, including ones you’ve read or dismissed.'] };
   const [eyebrow, title, description] = descriptions[view]; $('view-eyebrow').textContent = eyebrow; $('view-title').textContent = title; $('view-description').textContent = description;
@@ -95,6 +94,13 @@ function render() {
   const pool = view === 'catchup' ? catchupItems() : view === 'saved' ? savedItems() : editions;
   if (view === 'catchup') sourceFilters(pool);
   const visible = pool.filter(edition => view !== 'catchup' || !selectedSources.size || selectedSources.has(newsletterName(edition.source))).slice().sort((a,b) => b.date - a.date);
+  const todayRange = dayRange(localDay());
+  const today = editions.filter(edition => edition.date >= todayRange.start && edition.date < todayRange.end);
+  const hiddenProgress = today.filter(edition => state(edition.id).read || state(edition.id).dismissed).length;
+  const hiddenFilters = today.filter(edition => !state(edition.id).read && !state(edition.id).dismissed && selectedSources.size && !selectedSources.has(newsletterName(edition.source))).length;
+  $('inbox-coverage').hidden = !current || view !== 'catchup';
+  $('inbox-coverage-count').textContent = `${today.length} ${today.length === 1 ? 'edition' : 'editions'} received today · ${formatDate(todayRange.start)} London time`;
+  $('inbox-coverage-note').textContent = [hiddenProgress ? `${hiddenProgress} read or dismissed.` : '', hiddenFilters ? `${hiddenFilters} hidden by your source filters.` : '', 'Archive shows all loaded editions. Daily briefs include every labelled edition for their date.'].filter(Boolean).join(' ');
   $('list-summary').textContent = `${visible.length} ${visible.length === 1 ? 'edition' : 'editions'}${busy ? ' · loading' : view === 'catchup' ? ' to catch up on' : ''}`;
   $('dismiss-older').hidden = view !== 'archive' || !editions.some(edition => !recent(edition) && !state(edition.id).dismissed);
   $('newsletter-list').hidden = isBrief;
@@ -105,7 +111,7 @@ function render() {
   $('clear-filters').hidden = view !== 'catchup' || !selectedSources.size;
   $('load-more').hidden = isBrief || !gmail || !nextPage || !current; $('load-more').disabled = busy;
   $('load-more').textContent = view === 'catchup' ? 'Load more newsletters' : 'Load older editions';
-  $('generate-brief').disabled = briefBusy || busy || !current;
+  $('generate-brief').disabled = briefBusy || busy || coverageBusy || !current;
   $('generate-brief').textContent = briefBusy ? 'Generating…' : briefNeedsUpdate ? 'Regenerate daily brief' : 'Generate daily brief';
   $('cancel-brief').hidden = !briefBusy;
   $('brief-date').disabled = briefBusy;
@@ -163,6 +169,7 @@ function openSettings() {
 function closeSession(clearAccount = true) {
   briefController?.abort(); briefController = null; briefBusy = false;
   savedBriefController?.abort(); savedBriefController = null;
+  coverageBusy = false;
   $('brief-result').hidden = true; $('brief-text').replaceChildren(); $('brief-source-list').replaceChildren();
   $('brief-day-sources').hidden = true;
   $('brief-progress-panel').hidden = true;
@@ -241,12 +248,16 @@ async function loadPage(reset = false, session = generation) {
   if (Date.now() >= expiresAt) { notice('Your Gmail session expired. Disconnect and connect Gmail again to continue.', true); return; }
   const api = gmail; busy = true; render(); notice('Loading newsletters…');
   try {
-    if (!labelId) labelId = await api.labelId(settings.label);
+    if (reset || !labelId) labelId = await api.labelId(settings.label);
     if (session !== generation) return;
     const page = await api.list(labelId, reset ? undefined : nextPage);
     const incoming = await metadataBatch(page.ids, api);
+    // A first page is not proof that every recent edition has been loaded.
+    // Use the same paginated metadata collector as the daily brief, regardless
+    // of read/dismissed state, provider filters or Gmail's page ordering.
+    if (reset) incoming.push(...await collectMetadata(api, labelId, recentRange(), api.controller.signal, message => { if (session === generation) notice(message); }, 1000));
     if (session !== generation) return;
-    const keep = reset ? editions.filter(edition => state(edition.id).saved) : editions;
+    const keep = reset ? editions.filter(edition => !recent(edition) || state(edition.id).saved) : editions;
     const combined = new Map(keep.map(edition => [edition.id, edition]));
     for (const edition of incoming) combined.set(edition.id, edition);
     if (reset) {
@@ -256,7 +267,9 @@ async function loadPage(reset = false, session = generation) {
       if (session !== generation) return;
     }
     editions = [...combined.values()]; nextPage = page.nextPage;
-    notice(editions.length ? '' : 'Your label has no newsletters yet. Add some in Gmail, then refresh.');
+    const recentCount = editions.filter(recent).length;
+    notice(editions.length ? `Refresh complete · ${recentCount} recent ${recentCount === 1 ? 'edition' : 'editions'} loaded from Gmail. Read or dismissed editions remain in Archive.` : 'Your label has no newsletters yet. Add some in Gmail, then refresh.');
+    return true;
   } catch (error) { if (session === generation && error.name !== 'AbortError') notice(error.message, true); }
   finally { if (session === generation) { busy = false; render(); } }
 }
@@ -272,7 +285,11 @@ $('settings-form').addEventListener('submit', event => {
 $('settings-button').addEventListener('click', openSettings); $('welcome-connect').addEventListener('click', () => settings.clientId ? connect() : openSettings()); $('connect-button').addEventListener('click', connect);
 $('demo-button').addEventListener('click', () => { closeSession(); mode = 'demo'; editions = demoEditions; progress = readStorage(progressKey(), {}); loadSourceSelection(); view = 'catchup'; notice(''); render(); });
 $('exit-demo').addEventListener('click', () => { closeSession(); notice(''); });
-$('refresh-button').addEventListener('click', () => mode === 'demo' ? (notice('Demo editions are samples. Connect Gmail for your own newsletters.'), render()) : view === 'brief' ? loadSavedBrief() : loadPage(true));
+$('refresh-button').addEventListener('click', async () => {
+  if (mode === 'demo') { notice('Demo editions are samples. Connect Gmail for your own newsletters.'); render(); return; }
+  const session = generation;
+  if (await loadPage(true) && session === generation) await loadSavedBrief();
+});
 $('load-more').addEventListener('click', () => loadPage(false));
 $('dismiss-older').addEventListener('click', () => {
   const previous = structuredClone(progress); let count = 0;
@@ -282,6 +299,7 @@ $('dismiss-older').addEventListener('click', () => {
 for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', () => setView(button.dataset.view));
 $('mobile-view').addEventListener('change', event => setView(event.target.value));
 $('clear-filters').addEventListener('click', () => selectSource(null));
+$('show-all-editions').addEventListener('click', () => setView('archive'));
 for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => $(button.dataset.close).close());
 $('reader-dialog').addEventListener('close', () => { readerRequest++; document.body.classList.remove('reader-open'); });
 // Both press and release must be outside the dialog: selecting text and then
@@ -303,6 +321,7 @@ $('brief-date').value = localDay();
 function clearBrief() {
   briefNeedsUpdate = false; $('brief-update-note').hidden = true;
   savedBriefController?.abort(); savedBriefController = null;
+  coverageBusy = false;
   $('brief-result').hidden = true; $('brief-text').replaceChildren(); $('brief-source-list').replaceChildren();
   $('brief-day-sources').hidden = true;
   $('brief-progress-panel').hidden = true;
@@ -353,6 +372,7 @@ async function loadSavedBrief() {
   if (!gmail || !hosted || briefBusy) return;
   savedBriefController?.abort();
   const controller = new AbortController(); savedBriefController = controller;
+  coverageBusy = true; render();
   const session = generation; const date = $('brief-date').value;
   try {
     dayRange(date);
@@ -364,7 +384,11 @@ async function loadSavedBrief() {
       showReport(report);
       const time = new Date(report.generatedAt).toLocaleString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       $('brief-status').textContent = `Saved report · generated ${time} London time. Generate again to include newer emails.`;
-    } else $('brief-status').textContent = 'No saved report for this date yet. Generate one from your newsletters.';
+    } else {
+      $('brief-result').hidden = true; $('brief-text').replaceChildren(); $('brief-source-list').replaceChildren();
+      briefNeedsUpdate = false; $('brief-update-note').hidden = true;
+      $('brief-status').textContent = 'No saved report for this date yet. Generate one from your newsletters.';
+    }
     const savedMessage = $('brief-status').textContent;
     $('brief-status').textContent = 'Checking every labelled edition for this date…';
     if (!labelId) labelId = await gmail.labelId(settings.label);
@@ -373,7 +397,7 @@ async function loadSavedBrief() {
     const missing = showDayCoverage(available, report);
     $('brief-status').textContent = report && missing ? `Saved report needs updating: ${missing} new ${missing === 1 ? 'edition' : 'editions'} found. Generate again to include all sources.` : savedMessage;
   } catch (error) { if (!controller.signal.aborted && session === generation) { $('brief-status').textContent = error.message; $('brief-status').classList.add('is-error'); } }
-  finally { if (savedBriefController === controller) savedBriefController = null; }
+  finally { if (savedBriefController === controller) { savedBriefController = null; coverageBusy = false; render(); } }
 }
 $('brief-date').addEventListener('change', () => { clearBrief(); loadSavedBrief(); });
 $('cancel-brief').addEventListener('click', () => briefController?.abort());

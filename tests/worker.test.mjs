@@ -4,10 +4,27 @@ import worker from '../worker.mjs';
 import { dayRange, localDay } from '../public/dates.js';
 import { chunks, MODEL, generateSummary, buildReferences, validateHighlights, SUMMARY_VERSION } from '../summary.mjs';
 import { newsletterName, newsletterTone } from '../public/sources.js';
+import { collectMetadata, collectDayMetadata, recentRange } from '../public/brief.js';
 
 const base = 'https://signal.example';
 const date = '2026-10-07';
 const source = { id: 'abc123', threadId: 'thread1', source: 'TLDR AI', subject: 'Today’s news', date: dayRange(date).start + 3600000, text: 'ARTICLE_ALPHA: A model release.\n' + 'Research findings and new developer tools. '.repeat(300) + '\nARTICLE_OMEGA: The last distinct story.', articles: [{ title: 'Model release', url: 'https://example.com/model' }] };
+await test('reader and brief metadata collection share complete pages and London boundaries', async () => {
+  const range = dayRange(date), signal = new AbortController().signal;
+  const messages = { a: range.start, b: range.start + 1000, c: range.start + 2000, d: range.end - 1, outside: range.end };
+  const api = {
+    list: async (label, token, query) => { assert.equal(label, 'newsletter-label'); assert.match(query, /^after:\d+ before:\d+$/); return token ? { ids: ['c', 'd', 'a', 'outside'], nextPage: null } : { ids: ['a', 'b'], nextPage: 'next' }; },
+    metadata: async id => ({ id, date: messages[id] })
+  };
+  const day = await collectDayMetadata(api, 'newsletter-label', date, signal);
+  const recent = await collectMetadata(api, 'newsletter-label', recentRange(new Date('2026-10-07T18:00:00Z')), signal, undefined, 1000);
+  assert.deepEqual(day.map(item => item.id), ['a', 'b', 'c', 'd']); assert.deepEqual(recent, day);
+  await assert.rejects(collectMetadata(api, 'newsletter-label', range, signal, undefined, 3), /No partial collection/);
+  await assert.rejects(collectMetadata({ ...api, list: async () => ({ ids: ['a'], nextPage: 'same' }) }, 'newsletter-label', range, signal), /repeated a results page/);
+  await assert.rejects(collectMetadata({ ...api, list: async (label, token) => { if (token) throw new Error('Page failed'); return { ids: ['a'], nextPage: 'next' }; } }, 'newsletter-label', range, signal), /Page failed/);
+  const autumn = recentRange(new Date('2026-10-25T20:00:00Z'));
+  assert.equal(autumn.start, dayRange('2026-10-19').start); assert.equal(autumn.end - autumn.start, (7 * 24 + 1) * 3600000);
+});
 function fixture() {
   const data = new Map(), inputs = [], writes = [];
   const env = {
@@ -190,6 +207,13 @@ try {
   await test('LinkedIn newsletter sender variants keep their canonical provider and colour', () => {
     const name = newsletterName('"DAIR.AI via LinkedIn" <newsletters-noreply@linkedin.com>');
     assert.equal(name, 'DAIR.AI'); assert.equal(newsletterTone(name), 'rose');
+    assert.equal(newsletterName('LinkedIn <newsletters-noreply@linkedin.com>', 'DAIR.AI: Weekly research'), 'DAIR.AI');
+    assert.equal(newsletterName('LinkedIn <newsletters-noreply@linkedin.com>', 'Weekly research', 'Read the latest from DAIR.AI'), 'DAIR.AI');
+    assert.equal(newsletterName('"Top AI Papers of the Week via LinkedIn" <newsletters-noreply@linkedin.com>'), 'DAIR.AI');
+    assert.equal(newsletterName('LinkedIn <newsletters-noreply@linkedin.com>', 'Top ML Papers of the Week: new issue'), 'DAIR.AI');
+    assert.equal(newsletterName('Other News <news@example.com>', 'DAIR.AI: Weekly research'), 'Other News');
+    assert.equal(newsletterName('LinkedIn <newsletters-noreply@linkedin.com>', 'An unrelated newsletter'), 'LinkedIn');
+    assert.equal(newsletterName('Research Digest <news@example.com>', 'Top AI Papers of the Week'), 'Research Digest');
     assert.equal(newsletterTone('TLDR Tech'), 'blue');
     assert.equal(newsletterTone('Research Weekly'), newsletterTone('Research Weekly'));
   });
