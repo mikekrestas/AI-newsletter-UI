@@ -64,6 +64,12 @@ The reader uses one card per newsletter section, with green linked article title
 
 ## Reading and filtering
 
+Connect and Refresh load every page from the last seven **London calendar days**, alongside the first page of older mail and saved editions. Refresh preserves older editions already loaded, bypasses browser response caches, and shows loading/completion or an error; a failed collection keeps the previous list. A safety limit stops periods exceeding 1,000 emails rather than displaying a partial recent collection. Daily briefs retain their separate 300-edition limit.
+
+Catch up shows today's received total separately from the unread list, explaining editions hidden by local read/dismissed state or source filters. **View all editions in Archive** opens the full loaded list. These hidden editions still enter a daily brief for their arrival date. Refresh also rechecks the selected daily brief's saved report and coverage, without fetching bodies or invoking AI; generate again to incorporate missing editions.
+
+DAIR.AI LinkedIn editions are identified from sender, subject and preview metadata, including the **Top AI Papers of the Week** / **Top ML Papers of the Week** newsletter titles. This metadata parsing is shared by the reading list and daily collection. Other LinkedIn newsletters remain separate. Every edition must still carry the configured Gmail label; Signal does not import unlabelled mail or fetch the full text of a LinkedIn article from the web. If a LinkedIn email contains only a teaser, that email text is the material available to the summariser.
+
 Every edition card can be clicked/tapped to open the reader, with its native title button providing keyboard access. Save, Dismiss and other action controls remain independent.
 
 Catch up groups editions by newsletter. Selected filters have stable provider colours: TLDR blue, TLDR AI violet, TLDR Dev teal, AlphaSignal amber and DAIR.AI rose. Other/new newsletters receive a stable colour automatically. Click TLDR AI, AlphaSignal or any other source chip to select it, then select more chips to combine newsletters. Click a selected chip to remove it; **All** resets the filter. Selections persist in that browser for the connected account. New sources appear automatically as their labelled messages are loaded; **Load more newsletters** fetches older editions. Counts and filtering apply to the editions currently loaded, with Catch up limited to the last seven days and unread, undismissed editions.

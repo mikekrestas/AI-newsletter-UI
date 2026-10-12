@@ -82,7 +82,7 @@ try {
   const generatedCalls = calls;
   await page.reload(); await page.getByRole('button', { name: 'Connect Gmail', exact: true }).first().click();
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'michaelkrestas1@gmail.com' && document.querySelector('#refresh-button').textContent === 'Refresh');
-  await page.locator('[data-view="brief"]').click(); await page.locator('.brief-overview').waitFor();
+  await page.locator('[data-view="brief"]').click(); await page.locator('#brief-date').fill(date); await page.locator('.brief-overview').waitFor();
   assert.equal(calls, generatedCalls); // Reading the hosted cache spends no AI.
   mode = 'headlines'; records.clear();
   await page.locator('#generate-brief').click(); await page.getByRole('button', { name: 'Retry AI writing', exact: true }).waitFor();
@@ -90,6 +90,16 @@ try {
   assert.equal(await page.locator('.brief-headline').innerText(), 'Video tools launch new creator controls');
   assert.equal(await page.locator('.brief-story-link').getAttribute('href'), 'https://example.com/video');
   const popup = page.waitForEvent('popup'); await page.locator('.brief-story-link').click(); const article = await popup; await article.waitForLoadState(); assert.equal(article.url(), 'https://example.com/video'); await article.close();
+  // PR #7's metadata-only Refresh must clear stale fallback controls when a
+  // saved report disappears, without spending AI or remembering a retry flag.
+  const beforeRefresh = calls; records.clear();
+  await page.locator('#refresh-button').click(); await page.locator('#brief-status').getByText(/No saved report/).waitFor();
+  assert.equal(calls, beforeRefresh);
+  assert.equal(await page.getByRole('button', { name: 'Retry AI writing', exact: true }).count(), 0);
+  assert.equal(await page.locator('#brief-result').isVisible(), false);
+  await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry AI writing', exact: true }).waitFor();
+  assert.equal(requests.at(-1).retryWriting, undefined);
   mode = 'normal'; await page.getByRole('button', { name: 'Retry AI writing', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('#brief-panel').matches('[aria-busy="true"]'));
   assert.equal(requests.at(-1).retryWriting, true);

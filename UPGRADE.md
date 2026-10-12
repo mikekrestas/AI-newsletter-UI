@@ -12,9 +12,13 @@ If the model still cannot write usable explanations, Signal shows a clearly labe
 
 New reports open with **Today, at a glance**: preferably two sentences, maximum three and 80 words, about the day's themes drawn only from the displayed highlights. An invalid/unavailable optional overview uses a grounded headline overview rather than discarding the report. No paid model or service was added; the existing 36-call ceiling includes review/overview work.
 
-After merge, run the normal pull/install/deploy commands below and verify **Signal 1.8** in the phone footer. Existing Google configuration, secrets and sessions need no changes. Regenerate old briefs to get the overview and updated writing pipeline. Production AI output still needs review against your real newsletters after deployment.
+After merge, wait for the configured **Deploy Signal** workflow to succeed (or use the manual commands below), then verify **Signal 1.8** in the phone footer. Existing Google configuration, secrets and sessions need no changes. Regenerate old briefs to get the overview and updated writing pipeline. Production AI output still needs review against your real newsletters after deployment.
 
 The release also supplies a Signal Home Screen icon and the name **Signal AI** for iOS and other mobile browsers. After deploying, remove the existing Home Screen shortcut and add the hosted app again through your browser's **Share → Add to Home Screen** so iOS refreshes its cached icon and name.
+
+Refresh now loads every results page in the recent seven London-calendar days and checks saved daily-brief coverage, with explicit loading/completion feedback. Previously loaded older editions remain available. Today's received total explains read/dismissed editions and source filters, with a shortcut to the full Archive list. DAIR.AI editions sent through LinkedIn are recognised from sender/subject/preview metadata and the Top AI/ML Papers of the Week titles, consistently in the reader and daily brief input.
+
+Use the configured automatic deployment or the manual steps below, preserving your existing configuration and secrets. Verify **Signal 1.8** in the footer. No auth setup or new KV is needed. Refresh uses no AI; regenerate an older brief if the coverage panel finds editions absent from it. Emails must still have the configured Gmail label. LinkedIn emails that contain only previews are summarised from those previews, not the full article hosted on LinkedIn.
 
 ## Release 1.7
 

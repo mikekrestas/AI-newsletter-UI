@@ -42,7 +42,7 @@ try {
   await page.locator('.brief-story-link').first().focus();
   const keyboard = page.waitForEvent('popup'); await page.keyboard.press('Enter'); const keyboardArticle = await keyboard;
   await keyboardArticle.waitForLoadState(); assert.equal(keyboardArticle.url(), 'https://example.com/maths'); await keyboardArticle.close();
-  await page.screenshot({ path: '/tmp/signal-v17-desktop-brief.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v17-desktop-brief.png', fullPage: true });
   for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1440, height: 1000 }]) {
     await page.setViewportSize(viewport);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -55,7 +55,7 @@ try {
       const phoneOpen = page.waitForEvent('popup'); await page.touchscreen.tap(tapBox.x + tapBox.width - 10, tapBox.y + tapBox.height - 10);
       const phoneArticle = await phoneOpen; await phoneArticle.waitForLoadState(); assert.equal(phoneArticle.url(), 'https://example.com/dataset'); await phoneArticle.close();
       await page.evaluate(() => { document.activeElement?.blur(); document.querySelector('#brief-result').scrollIntoView({ block: 'start', behavior: 'instant' }); });
-      await page.screenshot({ path: '/tmp/signal-v17-phone-brief.png' });
+      await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v17-phone-brief.png' });
     }
   }
   const legacy = await page.evaluate(async report => {

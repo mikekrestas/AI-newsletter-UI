@@ -58,9 +58,9 @@ try {
   await page.locator('#mobile-view').selectOption('brief'); await page.locator('#brief-date').fill('2026-10-07');
   await page.locator('#generate-brief').click();
   await page.locator('#brief-result').waitFor({ state: 'visible' });
-  await page.screenshot({ path: '/tmp/signal-v14-mobile-brief.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v14-mobile-brief.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({ path: '/tmp/signal-v14-desktop-brief.png', fullPage: true });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v14-desktop-brief.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.match(await page.locator('#brief-coverage').innerText(), /2 newsletters processed/);
   assert.equal(await page.locator('.brief-source-button').count(), 2);
@@ -97,7 +97,7 @@ try {
     return { bodyGap: text.getBoundingClientRect().top - heading.getBoundingClientRect().bottom, storyGap: parseFloat(getComputedStyle(node).marginTop) };
   });
   assert.ok(distance.storyGap > distance.bodyGap * 2, 'Headline must be much closer to its own body');
-  await page.screenshot({ path: '/tmp/signal-mobile-reader.png' });
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-mobile-reader.png' });
   await page.locator('#reader-scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
   const close = await page.getByRole('button', { name: 'Close reader' }).boundingBox();
   assert.ok(close.y >= 0 && close.y + close.height <= 844, 'Close control scrolled out of view');
