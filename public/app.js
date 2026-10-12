@@ -1,10 +1,10 @@
-import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=9';
-import { readableContent, decodeEntities, extractArticles } from './reader.js?v=9';
-import { newsletterName, newsletterTone } from './sources.js?v=9';
-import { renderReport, renderOverview, EDITORIAL_VERSION } from './report.js?v=9';
-import { demoEditions } from './demo.js?v=9';
-import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata, collectMetadata, recentRange } from './brief.js?v=9';
-import { showBriefProgress, stopBriefProgress } from './progress.js?v=9';
+import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=10';
+import { readableContent, decodeEntities, extractArticles } from './reader.js?v=10';
+import { newsletterName, newsletterTone } from './sources.js?v=10';
+import { renderReport, renderOverview, EDITORIAL_VERSION } from './report.js?v=10';
+import { demoEditions } from './demo.js?v=10';
+import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata, collectMetadata, recentRange } from './brief.js?v=10';
+import { showBriefProgress, stopBriefProgress } from './progress.js?v=10';
 const $ = id => document.getElementById(id);
 let view = 'catchup', mode = 'welcome', account = '', editions = [], progress = {}, gmail = null, labelId = '', nextPage = null, busy = false, generation = 0, readerRequest = 0, expiresAt = 0;
 let settings = readStorage('signal:settings', { clientId: '', label: 'AI Newsletters' });
@@ -413,8 +413,11 @@ $('generate-brief').addEventListener('click', async () => {
   const controller = new AbortController(); briefController = controller; briefBusy = true;
   clearBrief(); render();
   const started = performance.now();
-  const deadline = setTimeout(() => controller.abort(new DOMException('This request passed 40 seconds. Retry to reuse completed evaluations, or Refresh to check for a saved brief.', 'TimeoutError')), 40000);
-  const elapsed = setInterval(() => { $('brief-elapsed').textContent = `${Math.floor((performance.now() - started) / 1000)}s elapsed`; }, 1000);
+  const deadline = setTimeout(() => controller.abort(new DOMException('The service is still unavailable after automatic recovery. Your completed work is kept where possible. Try again later, or Refresh to check for a saved brief.', 'TimeoutError')), 150000);
+  const elapsed = setInterval(() => {
+    const seconds = Math.floor((performance.now() - started) / 1000);
+    $('brief-elapsed').textContent = `${seconds}s elapsed${seconds >= 40 ? ' · Still working; reusing completed work where possible.' : ''}`;
+  }, 1000);
   $('brief-elapsed').textContent = '0s elapsed';
   const update = (message, error = false) => { if (briefController === controller) { $('brief-status').textContent = message; $('brief-status').classList.toggle('is-error', error); } };
   const stage = progress => { if (briefController === controller) showBriefProgress(progress); };
@@ -430,7 +433,7 @@ $('generate-brief').addEventListener('click', async () => {
     }
     controller.signal.throwIfAborted();
     if (!sources.length) { $('brief-progress-panel').hidden = true; update('No newsletters were received on this date. Choose another day.'); return; }
-    stage({ stage: 'evaluating', message: 'Evaluating all newsletters and reusing completed evaluations…' });
+    stage({ stage: 'evaluating', message: 'Evaluating all newsletters and reusing completed batches…' });
     const report = demo ? {
       date, sources, editorialVersion: EDITORIAL_VERSION,
       overview: 'This fictional day centres on practical coding tools and more efficient AI. The highlights below show how an opening overview connects the day’s themes to individual articles.',

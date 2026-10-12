@@ -1,5 +1,6 @@
 import { dayRange } from './public/dates.js';
 import { generateSummary, buildReferences, MODEL, SUMMARY_VERSION } from './summary.mjs';
+import { evaluationCache } from './evaluation-cache.mjs';
 import { AuthError, authRoute, gmailRoute, sessionAccess, sessionConfigured, checkOrigin } from './auth.mjs';
 
 class ApiError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
@@ -72,7 +73,7 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (url.pathname === '/api/config' && request.method === 'GET') return json({
-        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.9', persistentAuth: sessionConfigured(env)
+        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.10', persistentAuth: sessionConfigured(env)
       });
       if (url.pathname.startsWith('/api/auth/')) return authRoute(request, env);
       if (url.pathname.startsWith('/api/gmail/')) return gmailRoute(request, env);
@@ -95,11 +96,7 @@ export default {
         // Reuse validated local-reference evaluations, scoped to the verified
         // owner/label. Cache keys hash the complete inputs; no email body is
         // stored. This is the existing private KV, not a new service.
-        const evaluationKey = async input => `evaluation:${identity}:${await hash(input)}`;
-        const cache = {
-          get: async input => env.REPORTS.get(await evaluationKey(input), 'json'),
-          put: async (input, candidates) => env.REPORTS.put(await evaluationKey(input), JSON.stringify(candidates), { expirationTtl: 30 * 86400 })
-        };
+        const cache = evaluationCache(env.REPORTS, identity, hash, context);
         const content = await generateSummary(sources, env.AI, signal, references, onProgress, { cache });
         signal.throwIfAborted();
         onProgress({ stage: 'reporting', message: 'Saving the finished brief for your other devices…' });
