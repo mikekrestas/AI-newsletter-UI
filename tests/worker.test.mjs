@@ -68,7 +68,7 @@ try {
     const input = f.inputs.map(input => input.messages[1].content).join('\n');
     assert.match(input, /ARTICLE_ALPHA/); assert.match(input, /ARTICLE_OMEGA/);
     assert.match(input, /A1: Model release/); assert.doesNotMatch(input, /https:\/\/example.com\/model/);
-    assert.ok(f.inputs.length > 2, 'Long body was not processed in full sections');
+    assert.equal(first.timings.mode, 'single-pass');
     assert.equal(f.writes[0].options.expirationTtl, 30 * 86400);
     assert.doesNotMatch(f.writes[0].value, /test-gmail-token|ARTICLE_ALPHA|ARTICLE_OMEGA/);
     assert.equal(Object.hasOwn(first.sources[0], 'text'), false);
@@ -157,7 +157,7 @@ try {
     const inputs = []; let finalCount = 0;
     const ai = { run: async (model, input) => {
       inputs.push(input); const system = input.messages[0].content, content = input.messages[1].content;
-      if (system.includes('EVALUATE SECTION')) return evaluation(input);
+      if (system.includes('EVALUATE SECTION')) return { response: JSON.stringify({ candidates: [...content.matchAll(/^(A\d+): (.+)$/gm)].map(([_, reference, title]) => ({ headline: title.includes('Research') ? 'ALPHA_UNIQUE research improves inference' : title.includes('Dataset') ? 'DAIR_UNIQUE dataset improves evaluation' : 'Model launches a developer API', detail: 'Researchers can now test the newly released evaluation model.', reference, importance: 5 })) }) };
       if (system.includes('JSON object')) {
         finalCount++;
         assert.match(content, /Provider: TLDR AI/); assert.match(content, /Provider: AlphaSignal/); assert.match(content, /Provider: DAIR.AI/);
@@ -173,7 +173,7 @@ try {
       if (content.includes('DAIR_UNIQUE')) return { response: 'DAIR_UNIQUE: A concrete new evaluation capability (A3, E3).' };
       return { response: 'Model news (A1). '.repeat(60) };
     } };
-    const report = await generateSummary(sources, ai, undefined, buildReferences(sources));
+    const report = await generateSummary(sources, ai, undefined, buildReferences(sources), undefined, { direct: false });
     assert.equal(finalCount, 2); assert.match(report.summary, /\(A2\)/); assert.match(report.summary, /\(A3\)/);
     const final = inputs.filter(input => input.messages[0].content.includes('JSON object') && !input.messages[0].content.includes('EVALUATE SECTION'))[0];
     assert.ok(final.messages[1].content.length < 6000);
@@ -273,7 +273,7 @@ try {
       return { response: input.messages[0].content.includes('"references"') ? '{"references":["A2","A999","A1"]}' : 'An uncited model answer.' };
     } });
     assert.deepEqual(report.highlights.map(item => item.reference), ['A2', 'A1']);
-    assert.equal(report.generationMode, 'source-headlines'); assert.equal(calls, 4);
+    assert.equal(report.generationMode, 'source-headlines'); assert.equal(calls, 3);
   });
   await test('headline digests are cached without automatic AI spending, and an explicit retry can replace them', async () => {
     const f = fixture(); const body = { date, sources: [{ ...source, text: 'A short release.' }] };
@@ -324,7 +324,7 @@ try {
       if (failure === 'malformed') assert.match((await response.json()).report.overview, /Model launches a developer API/);
     }
   });
-  await test('a large complete day removes consolidation and stays within 31 AI calls', async () => {
+  await test('many short editions use one whole-day pass and one repair if needed', async () => {
     const sources = Array.from({ length: 28 }, (_, i) => ({ ...source, id: 'section-' + i, text: 'EDITION_' + i + ': A complete release edition.' }));
     let calls = 0, editions = 0, drafts = 0;
     const report = await generateSummary(sources, { run: async (model, input) => {
@@ -338,7 +338,7 @@ try {
       if (system.includes('ONE provider')) return { response: 'A consolidated model release (A1).' };
       editions++; return { response: 'Model release (A1). '.repeat(34) };
     } });
-    assert.equal(editions, 28); assert.equal(calls, 31); assert.equal(drafts, 2);
+    assert.equal(editions, 0); assert.equal(calls, 3); assert.equal(drafts, 2);
     assert.equal(report.highlights.length, 1); assert.match(report.overview, /Today’s newsletters/);
   });
   await test('LinkedIn newsletter sender variants keep their canonical provider and colour', () => {

@@ -21,18 +21,29 @@ export async function bounded(task, milliseconds, signal) {
   finally { clearTimeout(timer); signal?.removeEventListener('abort', aborted); }
 }
 
-export async function parallelMap(items, concurrency, signal, action) {
+export function transientFailure(error) {
+  const message = String(error?.message || '');
+  if (/quota|neuron|daily allocation|10000|unauthori[sz]ed|forbidden|401|403|429/i.test(message)) return false;
+  return /overloaded|temporarily unavailable|service unavailable|bad gateway|gateway timeout|network error|fetch failed|\b50[234]\b/i.test(message);
+}
+
+export async function parallelMap(items, concurrency, signal, action, { settle = false } = {}) {
   const stopped = new AbortController();
   const active = signal ? AbortSignal.any([signal, stopped.signal]) : stopped.signal;
-  const results = new Array(items.length); let next = 0;
+  const results = new Array(items.length), failures = []; let next = 0;
   try {
     await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
       while (next < items.length) {
         active.throwIfAborted();
         const index = next++;
-        results[index] = await action(items[index], index, active);
+        try { results[index] = await action(items[index], index, active); }
+        catch (error) {
+          if (!settle || active.aborted || /quota|neuron|daily allocation|processing limit|unauthori[sz]ed|forbidden|401|403|429/i.test(error.message)) throw error;
+          failures.push(error);
+        }
       }
     }));
+    if (failures.length) throw failures[0];
     return results;
   } catch (error) { stopped.abort(error); throw error; }
 }

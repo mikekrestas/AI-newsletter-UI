@@ -108,7 +108,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Generate daily brief', exact: true }).count(), 1);
   // Untrusted overview text stays literal, even when rendering a legacy record.
   const safe = await page.evaluate(async () => {
-    const { renderOverview } = await import('/report.js?v=9');
+    const { renderOverview } = await import('/report.js?v=10');
     const node = renderOverview({ overview: '<img src=x onerror=alert(1)> literal text.' });
     return { images: node.querySelectorAll('img').length, text: node.textContent, missing: renderOverview({}) };
   });

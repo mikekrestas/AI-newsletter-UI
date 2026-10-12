@@ -1,5 +1,17 @@
 # Signal: chat and project handoff
 
+## 12 October: proposed Signal 1.10 reliability fix
+
+PR #9 is merged; this branch starts from main `19cde870b56ee21b3ee0df914cfa9a37ee7e49fb`. The owner reported recurring failures around 24 seconds, consistent with the old 22-second evaluation deadline. Work is on `codex/robust-batched-brief`; verify its PR and deployment status before treating it as live. Prior 1.9 bounds below are historical, superseded by this section.
+
+Small days use one full-day model pass; larger days pack all full text and reference catalogues into batches of at most 22,000 UTF-8 bytes, four evaluations concurrently, then write the final brief with its overview. Existing model/context checked against official docs: llama-3.1-8b-instruct-fp8, 32,000 tokens. Global provider balancing and article validation remain. No new service, paid model, cron, background prefetch or credential/config changes. BRIEF_DESIGN.md records comparison of caching, model changes and durable Workflows (available Free, deferred).
+
+One bounded retry handles explicit transient service/network errors; quota/auth and timed-out in-flight calls do not automatically retry. Malformed batches get one formatting repair. Successful sibling batches finish/cache after another fails. KV retains validated candidate notes for 30 days; evaluation-cache.mjs adds owner-scoped write-through memory (128 entries/15 minutes) to mitigate immediate stale misses in the same isolate. Cached local reference keys remap by URL. No raw email bodies are persisted. This is not a durable job or distributed lock, and closing the app does not guarantee completion.
+
+The 30–40-second target is now separate from recovery bounds: 60 seconds per AI call, 135 seconds overall AI, 150 seconds browser including Gmail. No independent 22-second phase cutoff. Slow optional prose preserves valid highlights; only a fully evaluated day can use the existing labelled original-headline fallback after writer timeout. Bounds remain 126k text characters, 300 editions/links, 512KB request, up to28 batches and36 attempts including recovery. The UI reports continued work after40 seconds and remains cancellable. Release1.10/assetsv10/editorialsignal-10 invalidate stale assets/evaluations; saved older reports stay readable without AI spending.
+
+Verification: syntax; 47 backend/deployment tests; seven Chromium browser suites including320/390/1440 widths, continuation/completion after40 seconds, terminal150-second timeout, cancellation, links and persisted sign-in; Worker dry run. Ten varied-latency fixture runs with injected recoverable failures completed. A separate simulated20-edition run used3 parallel evaluation batches delayed2/9/26 seconds plus2-second writing:28.032 seconds cold (4 calls), then2.006 seconds with3 reused batches (1 call). These are simulated inference timings, excluding Gmail/auth/network; they are not a measured production latency or reliability guarantee. No Cloudflare credentials/private inbox access were available; live latency, editorial quality, neuron consumption and physical Safari remain unverified. Merge/deploy stays the owner's decision through the existing main workflow.
+
 ## 12 October: proposed Signal 1.9 latency fix
 
 The owner reported waiting 10–15 minutes in Evaluation and requested a 30–40-second target. Main was verified at `8f2ea55` with PR #8 merged. New work is on `codex/faster-daily-brief`; verify its PR/deployment status before assuming it is live.

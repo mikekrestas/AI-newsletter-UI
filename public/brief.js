@@ -1,6 +1,6 @@
-import { readableContent, extractArticles } from './reader.js?v=9';
-import { dayRange, localDay } from './dates.js?v=9';
-export { localDay, dayRange } from './dates.js?v=9';
+import { readableContent, extractArticles } from './reader.js?v=10';
+import { dayRange, localDay } from './dates.js?v=10';
+export { localDay, dayRange } from './dates.js?v=10';
 
 export function newsletterText(body) {
   const fragment = readableContent(body.content, body.html);
