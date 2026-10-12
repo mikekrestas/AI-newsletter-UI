@@ -25,13 +25,21 @@ await test('reader and brief metadata collection share complete pages and London
   const autumn = recentRange(new Date('2026-10-25T20:00:00Z'));
   assert.equal(autumn.start, dayRange('2026-10-19').start); assert.equal(autumn.end - autumn.start, (7 * 24 + 1) * 3600000);
 });
+function evaluation(input) {
+  const content = input.messages[1].content;
+  const headline = content.includes('ALPHA_UNIQUE') ? 'ALPHA_UNIQUE research improves inference' : content.includes('DAIR_UNIQUE') ? 'DAIR_UNIQUE dataset improves evaluation' : 'Model launches a developer API';
+  return { response: JSON.stringify({ candidates: /\nA1:/.test(content) ? [{ headline, detail: 'Developers can now test the new model through an API.', reference: 'A1', importance: 5 }] : [] }) };
+}
+function mockAI(run) {
+  return { run: async (model, input) => input.messages[0].content.includes('EVALUATE SECTION') ? evaluation(input) : run(model, input) };
+}
 function fixture() {
   const data = new Map(), inputs = [], writes = [];
   const env = {
     OWNER_EMAIL: 'michaelkrestas1@gmail.com', GOOGLE_CLIENT_ID: 'test.apps.googleusercontent.com', NEWSLETTER_LABEL: 'AI Newsletters',
     ASSETS: { fetch: async () => new Response('static app') },
-    REPORTS: { get: async key => data.has(key) ? JSON.parse(data.get(key)) : null, put: async (key, value, options) => { data.set(key, value); writes.push({ value, options }); } },
-    AI: { run: async (model, input) => { assert.equal(model, MODEL); inputs.push(input); return { response: input.messages[0].content.includes('JSON object') ? JSON.stringify({ highlights: [{ headline: 'Model launches a developer API', detail: 'Developers can now test the new model through an API.', reference: 'A1' }] }) : 'Notes on models (A1), research and developer tools (E1).' }; } }
+    REPORTS: { get: async key => data.has(key) ? JSON.parse(data.get(key)) : null, put: async (key, value, options) => { data.set(key, value); if (key.startsWith('signal-3:')) writes.push({ value, options }); } },
+    AI: { run: async (model, input) => { assert.equal(model, MODEL); inputs.push(input); if (input.messages[0].content.includes('EVALUATE SECTION')) return evaluation(input); return { response: input.messages[0].content.includes('JSON object') ? JSON.stringify({ highlights: [{ headline: 'Model launches a developer API', detail: 'Developers can now test the new model through an API.', reference: 'A1' }] }) : 'Notes on models (A1), research and developer tools (E1).' }; } }
   };
   return { env, data, inputs, writes };
 }
@@ -121,7 +129,7 @@ try {
   await test('saved reports from Signal 1.3 stay readable but regenerate with citations on demand', async () => {
     const f = fixture();
     await worker.fetch(request(), f.env);
-    const key = [...f.data.keys()][0]; assert.match(key, /^signal-3:/);
+    const key = [...f.data.keys()].find(key => key.startsWith('signal-3:')); assert.match(key, /^signal-3:/);
     f.data.set(key, JSON.stringify({ date, summary: '* A legacy saved report.', sources: [{ id: source.id, subject: source.subject, source: source.source, date: source.date }], fingerprint: 'legacy', generatedAt: '2026-10-07T08:00:00Z' }));
     const calls = f.inputs.length;
     const old = (await (await worker.fetch(request('GET'), f.env)).json()).report;
@@ -137,9 +145,10 @@ try {
     assert.equal((await response.json()).report.references.filter(ref => ref.type === 'article').length, 300);
     for (const input of f.inputs) assert.ok(input.messages[1].content.length < 16000);
     const final = f.inputs.findLast(input => input.messages[0].content.includes('JSON object')).messages[1].content;
-    assert.match(final, /A1:/); assert.match(final, /A300:/);
+    assert.match(final, /A1:/); assert.match(final, /A241:/);
+    assert.ok(f.inputs.some(input => input.messages[1].content.includes('A60:')), 'Every extracted article remains available during evaluation');
   });
-  await test('long editions get a balanced provider budget and a one-provider draft gets reviewed', async () => {
+  await test('parallel section candidates get a balanced provider budget without AI consolidation', async () => {
     const sources = [
       { ...source, text: 'LONG_TLDR: ' + 'model news '.repeat(1500) },
       { ...source, id: 'alpha', source: 'AlphaSignal', text: 'ALPHA_UNIQUE: A reproducible research result.', articles: [{ title: 'Research', url: 'https://example.com/research' }] },
@@ -148,6 +157,7 @@ try {
     const inputs = []; let finalCount = 0;
     const ai = { run: async (model, input) => {
       inputs.push(input); const system = input.messages[0].content, content = input.messages[1].content;
+      if (system.includes('EVALUATE SECTION')) return evaluation(input);
       if (system.includes('JSON object')) {
         finalCount++;
         assert.match(content, /Provider: TLDR AI/); assert.match(content, /Provider: AlphaSignal/); assert.match(content, /Provider: DAIR.AI/);
@@ -165,11 +175,11 @@ try {
     } };
     const report = await generateSummary(sources, ai, undefined, buildReferences(sources));
     assert.equal(finalCount, 2); assert.match(report.summary, /\(A2\)/); assert.match(report.summary, /\(A3\)/);
-    const final = inputs.filter(input => input.messages[0].content.includes('JSON object'))[0];
+    const final = inputs.filter(input => input.messages[0].content.includes('JSON object') && !input.messages[0].content.includes('EVALUATE SECTION'))[0];
     assert.ok(final.messages[1].content.length < 6000);
     assert.match(final.messages[0].content, /credible research evidence/);
     assert.ok(inputs.some(input => /EDITORIAL REVIEW/.test(input.messages[0].content)));
-    assert.ok(inputs.some(input => input.messages[0].content.includes('ONE provider')));
+    assert.equal(inputs.some(input => input.messages[0].content.includes('ONE provider')), false);
   });
   await test('editorial validation rejects fragments, duplicate story details and missing article links', () => {
     const references = buildReferences([source]);
@@ -188,7 +198,7 @@ try {
     const mathsSource = { ...source, text: 'OpenAI released 722 maths manuscripts from an unreleased internal model onto GitHub. The model attempted 4,000 problems; its test workload is supporting context for the same release.', articles: [{ title: 'OpenAI maths manuscripts', url: 'https://example.com/maths' }] };
     const f = fixture(); const regular = f.env.AI.run; let finalCalls = 0;
     f.env.AI.run = async (model, input) => {
-      if (!input.messages[0].content.includes('JSON object')) return regular(model, input);
+      if (input.messages[0].content.includes('EVALUATE SECTION') || !input.messages[0].content.includes('JSON object')) return regular(model, input);
       finalCalls++;
       if (finalCalls === 1) return { response: JSON.stringify({ highlights: [{ headline: 'OpenAI publishes maths manuscripts', detail: 'The model was given 4,000 problems to attempt, with each result using about 3 hours of', reference: 'A1' }] }) };
       assert.match(input.messages[0].content, /complete sentence/); assert.match(input.messages[0].content, /supporting context, NOT a separate news item/);
@@ -200,7 +210,7 @@ try {
     const invalid = fixture(); invalid.env.AI.run = async () => ({ response: '* An uncited free-form evaluator answer.' });
     assert.equal((await worker.fetch(request(), invalid.env)).status, 422); assert.equal(invalid.writes.length, 0);
     const quiet = fixture(); const extraction = quiet.env.AI.run;
-    quiet.env.AI.run = async (model, input) => input.messages[0].content.includes('JSON object') ? { response: '{"highlights":[]}' } : extraction(model, input);
+    quiet.env.AI.run = async (model, input) => !input.messages[0].content.includes('EVALUATE SECTION') && input.messages[0].content.includes('JSON object') ? { response: '{"highlights":[]}' } : extraction(model, input);
     const none = (await (await worker.fetch(request('POST', { date, sources: [{ ...source, text: 'Only routine tutorials today.', articles: [] }] }), quiet.env)).json()).report;
     assert.deepEqual(none.highlights, []); assert.equal(none.summary, ''); assert.equal(none.unlinkedEditionCount, 1);
   });
@@ -210,6 +220,7 @@ try {
     let reviews = 0;
     f.env.AI.run = async (model, input) => {
       const system = input.messages[0].content;
+      if (system.includes('EVALUATE SECTION')) return evaluation(input);
       if (system.includes('opening paragraph')) return { response: 'Today’s newsletters focus on new model access. Developers have another API to try.' };
       if (!system.includes('JSON object')) return { response: 'A model API becomes available (A1).' };
       if (system.includes('EDITORIAL REVIEW')) { reviews++; return { response: 'The second draft was incomplete: {"highlights":[' }; }
@@ -234,7 +245,7 @@ try {
     const sources = [{ ...source, text: 'Short edition.', articles: Array.from({ length: 8 }, (_, i) => ({ title: 'Model number ' + i + ' launches', url: `https://example.com/model-${i}` })) }];
     const items = sources[0].articles.map((article, i) => ({ headline: article.title, detail: 'Developers can now use this model through a newly available API, with clear documentation and reproducible examples for testing applications.', reference: 'A' + (i + 1) }));
     const complete = JSON.stringify(items).slice(1, -1);
-    const report = await generateSummary(sources, { run: async (model, input) => ({ response: input.messages[0].content.includes('JSON object') ? '{"highlights":[' + complete + ',{"headline":"Unfinished story","detail":"Not completed' : 'Known models launch (A1).' }) });
+    const report = await generateSummary(sources, mockAI(async (model, input) => ({ response: input.messages[0].content.includes('JSON object') ? '{"highlights":[' + complete + ',{"headline":"Unfinished story","detail":"Not completed' : 'Known models launch (A1).' })));
     assert.ok(report.highlights.length > 0 && report.highlights.length < 8);
     assert.ok(report.highlights.map(item => item.headline + ' ' + item.detail).join(' ').split(/\s+/).length <= 180);
     assert.doesNotMatch(JSON.stringify(report.highlights), /Unfinished|Not completed/);
@@ -242,8 +253,8 @@ try {
   });
   await test('repeated final-format failure becomes an explicit original-headline digest with real links', async () => {
     const f = fixture(); const events = [];
-    f.env.AI.run = async (model, input) => ({ response: input.messages[0].content.includes('JSON object')
-      ? '* [Model release](A1) The model is available for' : 'A major model release (A1).' });
+    f.env.AI.run = mockAI(async (model, input) => ({ response: input.messages[0].content.includes('JSON object')
+      ? '* [Model release](A1) The model is available for' : 'A major model release (A1).' })).run;
     const response = await worker.fetch(request('POST', { date, sources: [{ ...source, text: 'A short release edition.' }] }, { headers: { Accept: 'text/event-stream' } }), f.env);
     for (const part of (await response.text()).trim().split('\n\n')) events.push(JSON.parse(part.slice(6)));
     const report = events.at(-1).report;
@@ -258,6 +269,7 @@ try {
     let calls = 0;
     const report = await generateSummary(sources, { run: async (model, input) => {
       calls++;
+      if (input.messages[0].content.includes('EVALUATE SECTION')) return { response: JSON.stringify({ candidates: ['A1', 'A2'].map(reference => ({ headline: 'A useful model development ' + reference.slice(1), detail: 'Researchers can now test a newly released model.', reference, importance: 5 })) }) };
       return { response: input.messages[0].content.includes('"references"') ? '{"references":["A2","A999","A1"]}' : 'An uncited model answer.' };
     } });
     assert.deepEqual(report.highlights.map(item => item.reference), ['A2', 'A1']);
@@ -266,7 +278,7 @@ try {
   await test('headline digests are cached without automatic AI spending, and an explicit retry can replace them', async () => {
     const f = fixture(); const body = { date, sources: [{ ...source, text: 'A short release.' }] };
     let calls = 0;
-    f.env.AI.run = async () => { calls++; return { response: 'Model release (A1) with incomplete wording for' }; };
+    f.env.AI.run = async (model, input) => { calls++; return input.messages[0].content.includes('EVALUATE SECTION') ? evaluation(input) : { response: 'Model release (A1) with incomplete wording for' }; };
     const first = (await (await worker.fetch(request('POST', body), f.env)).json()).report;
     assert.equal(first.generationMode, 'source-headlines'); const initialCalls = calls;
     await worker.fetch(request('GET'), f.env);
@@ -312,11 +324,12 @@ try {
       if (failure === 'malformed') assert.match((await response.json()).report.overview, /Model launches a developer API/);
     }
   });
-  await test('a large complete day reserves writing/review/overview within the existing 36-call ceiling', async () => {
+  await test('a large complete day removes consolidation and stays within 31 AI calls', async () => {
     const sources = Array.from({ length: 28 }, (_, i) => ({ ...source, id: 'section-' + i, text: 'EDITION_' + i + ': A complete release edition.' }));
     let calls = 0, editions = 0, drafts = 0;
     const report = await generateSummary(sources, { run: async (model, input) => {
       calls++; const system = input.messages[0].content;
+      if (system.includes('EVALUATE SECTION')) { editions++; return evaluation(input); }
       if (system.includes('opening paragraph')) return { response: 'Today’s newsletters focus on access to a new model. Developers can try its API.' };
       if (system.includes('JSON object')) {
         drafts++;
@@ -325,7 +338,7 @@ try {
       if (system.includes('ONE provider')) return { response: 'A consolidated model release (A1).' };
       editions++; return { response: 'Model release (A1). '.repeat(34) };
     } });
-    assert.equal(editions, 28); assert.equal(calls, 36); assert.equal(drafts, 2);
+    assert.equal(editions, 28); assert.equal(calls, 31); assert.equal(drafts, 2);
     assert.equal(report.highlights.length, 1); assert.match(report.overview, /Today’s newsletters/);
   });
   await test('LinkedIn newsletter sender variants keep their canonical provider and colour', () => {
@@ -363,7 +376,7 @@ try {
     f.env.AI.run = async () => { await new Promise(resolve => { release = resolve; }); return { response: 'Notes on model news (A1).' }; };
     const response = await worker.fetch(request('POST', undefined, { headers: { Accept: 'text/event-stream' } }), f.env);
     const reader = response.body.getReader(); await reader.read();
-    await reader.cancel(); release();
+    await reader.cancel(); release?.();
     await new Promise(resolve => setTimeout(resolve, 10)); assert.equal(f.writes.length, 0);
   });
 } finally { globalThis.fetch = originalFetch; }

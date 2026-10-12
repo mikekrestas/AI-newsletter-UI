@@ -1,10 +1,10 @@
-import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=8';
-import { readableContent, decodeEntities, extractArticles } from './reader.js?v=8';
-import { newsletterName, newsletterTone } from './sources.js?v=8';
-import { renderReport, renderOverview, EDITORIAL_VERSION } from './report.js?v=8';
-import { demoEditions } from './demo.js?v=8';
-import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata, collectMetadata, recentRange } from './brief.js?v=8';
-import { showBriefProgress, stopBriefProgress } from './progress.js?v=8';
+import { Gmail, READ_SCOPE, loadGoogleIdentity } from './gmail.js?v=9';
+import { readableContent, decodeEntities, extractArticles } from './reader.js?v=9';
+import { newsletterName, newsletterTone } from './sources.js?v=9';
+import { renderReport, renderOverview, EDITORIAL_VERSION } from './report.js?v=9';
+import { demoEditions } from './demo.js?v=9';
+import { localDay, dayRange, newsletterText, collectDay, collectDayMetadata, collectMetadata, recentRange } from './brief.js?v=9';
+import { showBriefProgress, stopBriefProgress } from './progress.js?v=9';
 const $ = id => document.getElementById(id);
 let view = 'catchup', mode = 'welcome', account = '', editions = [], progress = {}, gmail = null, labelId = '', nextPage = null, busy = false, generation = 0, readerRequest = 0, expiresAt = 0;
 let settings = readStorage('signal:settings', { clientId: '', label: 'AI Newsletters' });
@@ -356,7 +356,7 @@ function showDayCoverage(editions, report) {
 function showReport(report, demo = false) {
   briefNeedsUpdate = !demo && report.editorialVersion !== EDITORIAL_VERSION;
   briefHeadlineOnly = report.generationMode === 'source-headlines';
-  $('brief-update-note').textContent = briefNeedsUpdate ? 'This saved brief uses the previous summariser. Regenerate it for the new opening overview and more reliable linked highlights.' : report.unlinkedEditionCount ? `${report.unlinkedEditionCount} ${report.unlinkedEditionCount === 1 ? 'edition did' : 'editions did'} not supply article links. Their news cannot appear as linked highlights; you can read those emails in Source editions.` : '';
+  $('brief-update-note').textContent = briefNeedsUpdate ? 'This saved brief uses the previous summariser. Regenerate it with the faster evaluation pipeline and current selection rules.' : report.unlinkedEditionCount ? `${report.unlinkedEditionCount} ${report.unlinkedEditionCount === 1 ? 'edition did' : 'editions did'} not supply article links. Their news cannot appear as linked highlights; you can read those emails in Source editions.` : '';
   $('brief-update-note').hidden = !$('brief-update-note').textContent;
   $('brief-text').replaceChildren(...[renderOverview(report), renderReport(report, openEdition)].filter(Boolean));
   document.querySelector('.brief-link-hint').hidden = !$('brief-text').querySelector('a');
@@ -412,6 +412,10 @@ $('generate-brief').addEventListener('click', async () => {
   const session = generation; const api = gmail; const demo = mode === 'demo'; const retryWriting = briefHeadlineOnly;
   const controller = new AbortController(); briefController = controller; briefBusy = true;
   clearBrief(); render();
+  const started = performance.now();
+  const deadline = setTimeout(() => controller.abort(new DOMException('This request passed 40 seconds. Retry to reuse completed evaluations, or Refresh to check for a saved brief.', 'TimeoutError')), 40000);
+  const elapsed = setInterval(() => { $('brief-elapsed').textContent = `${Math.floor((performance.now() - started) / 1000)}s elapsed`; }, 1000);
+  $('brief-elapsed').textContent = '0s elapsed';
   const update = (message, error = false) => { if (briefController === controller) { $('brief-status').textContent = message; $('brief-status').classList.toggle('is-error', error); } };
   const stage = progress => { if (briefController === controller) showBriefProgress(progress); };
   stage({ stage: 'collecting', message: 'Collecting every newsletter for this date…' });
@@ -421,12 +425,12 @@ $('generate-brief').addEventListener('click', async () => {
       sources = demoEditions.filter(item => item.date >= range.start && item.date < range.end)
         .map(item => ({ ...item, text: newsletterText({ content: item.demoBody, html: true }), articles: extractArticles({ content: item.demoBody, html: true }) }));
     } else {
-      if (!labelId) labelId = await api.labelId(settings.label);
+      if (!labelId) labelId = await api.labelId(settings.label, controller.signal);
       sources = await collectDay(api, labelId, date, controller.signal, update, stage);
     }
     controller.signal.throwIfAborted();
     if (!sources.length) { $('brief-progress-panel').hidden = true; update('No newsletters were received on this date. Choose another day.'); return; }
-    stage({ stage: 'evaluating', message: 'Summarising all newsletter sections and merging the day’s news…' });
+    stage({ stage: 'evaluating', message: 'Evaluating all newsletters and reusing completed evaluations…' });
     const report = demo ? {
       date, sources, editorialVersion: EDITORIAL_VERSION,
       overview: 'This fictional day centres on practical coding tools and more efficient AI. The highlights below show how an opening overview connects the day’s themes to individual articles.',
@@ -446,8 +450,11 @@ $('generate-brief').addEventListener('click', async () => {
     if (view === 'brief') $('brief-result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
   } catch (error) {
     if (briefController === controller) stopBriefProgress(controller.signal.aborted ? 'Cancelled' : 'Generation stopped');
-    update(controller.signal.aborted ? 'Report cancelled. No partial brief was saved.' : error.message, !controller.signal.aborted);
+    const timedOut = controller.signal.reason?.name === 'TimeoutError';
+    update(timedOut ? controller.signal.reason.message : controller.signal.aborted ? 'Report cancelled. No partial brief was saved.' : error.message, timedOut || !controller.signal.aborted);
   } finally {
+    clearTimeout(deadline); clearInterval(elapsed);
+    $('brief-elapsed').textContent = `${Math.round((performance.now() - started) / 1000)}s elapsed`;
     if (briefController === controller) { briefController = null; briefBusy = false; render(); }
   }
 });

@@ -1,5 +1,14 @@
 # Update your existing hosted Signal app through Git
 
+## Signal 1.9: faster daily briefs
+
+Generation now evaluates up to eight full newsletter sections in parallel, removes recursive provider condensation, and reuses validated evaluations of unchanged sections in the existing private KV. New arrivals and explicit writing retries need less repeated work. Every newsletter still reaches evaluation; direct article links, provider balance, short overviews and read-only Gmail remain.
+
+The AI phase is bounded to 35 seconds; the browser stops the request after 40 seconds with elapsed-time feedback and a retry message. A timeout during evaluation saves no incomplete report, while completed evaluations remain reusable. A stalled final writer can use the labelled original-headline digest only after every section was evaluated. Free-service response times and Gmail/network latency mean 30–40 seconds is a target, not a guaranteed successful report.
+
+Merge the PR and wait for **Deploy Signal** to succeed, then refresh and verify **Signal 1.9**. No new secrets, Google changes, resources, paid API, scheduler or configuration steps are needed. Existing reports remain readable without AI spending; regeneration uses editorial version `signal-9`.
+
+
 Signal is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
 
 For automatic releases after merging to main, follow [DEPLOYMENT.md](DEPLOYMENT.md). It requires only CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in GitHub Actions secrets and reuses the live Worker's configuration. Once configured, you can merge/release from your phone without the PC commands below.

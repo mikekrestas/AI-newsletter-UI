@@ -6,18 +6,18 @@
   <meta name="description" content="A calmer place to catch up with your AI newsletters. A personal, free Gmail reader.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://gmail.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; style-src 'self' https://accounts.google.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>Signal AI</title>
-  <link rel="icon" href="/favicon-16x16.png?v=8" type="image/png" sizes="16x16">
-  <link rel="icon" href="/favicon-32x32.png?v=8" type="image/png" sizes="32x32">
-  <link rel="icon" href="/favicon.svg?v=8" type="image/svg+xml" sizes="any">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=8">
-  <link rel="manifest" href="/site.webmanifest?v=8">
+  <link rel="icon" href="/favicon-16x16.png?v=9" type="image/png" sizes="16x16">
+  <link rel="icon" href="/favicon-32x32.png?v=9" type="image/png" sizes="32x32">
+  <link rel="icon" href="/favicon.svg?v=9" type="image/svg+xml" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=9">
+  <link rel="manifest" href="/site.webmanifest?v=9">
   <meta name="theme-color" content="#202a44">
   <meta name="apple-mobile-web-app-title" content="Signal AI">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="style.css?v=8">
-  <link rel="stylesheet" href="reader-updates.css?v=8">
-  <script type="module" src="app.js?v=8"></script>
+  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="reader-updates.css?v=9">
+  <script type="module" src="app.js?v=9"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to newsletters</a>
@@ -35,7 +35,7 @@
         <button class="nav-item" data-view="saved"><span>Saved</span><span id="saved-count" class="count">0</span></button>
         <button class="nav-item" data-view="archive"><span>Archive</span></button>
       </nav>
-      <div class="sidebar-bottom"><span>Signal 1.8 · Personal reader</span><a href="setup.html" target="_blank" rel="noopener">Gmail setup guide</a></div>
+      <div class="sidebar-bottom"><span>Signal 1.9 · Personal reader</span><a href="setup.html" target="_blank" rel="noopener">Gmail setup guide</a></div>
     </aside>
     <main id="main" tabindex="-1">
       <div class="page-title"><div><span id="view-eyebrow" class="eyebrow">A LITTLE LESS NOISE</span><h1 id="view-title">Catch up</h1><p id="view-description">Your last seven days. Older editions can wait.</p></div><button id="refresh-button" class="button secondary" disabled>Refresh</button></div>
@@ -50,7 +50,7 @@
         <p id="brief-help" class="field-help">Free daily briefs, saved for 30 days. Cloudflare processes your newsletter text. <a href="brief-setup.html" target="_blank" rel="noopener">How it works</a></p>
         <div id="brief-day-sources" class="brief-day-sources" hidden><h3 id="brief-day-heading"></h3><div id="brief-day-provider-list" class="provider-badges"></div><p id="brief-day-note"></p></div>
         <div class="brief-buttons"><button id="generate-brief" class="button primary">Generate daily brief</button><button id="cancel-brief" class="button secondary" hidden>Cancel</button></div>
-        <div id="brief-progress-panel" class="brief-progress" hidden><progress id="brief-progress" max="100" value="0" aria-label="Daily brief generation progress"></progress><ol class="brief-stages"><li data-stage="collecting">Collecting</li><li data-stage="evaluating">Evaluating</li><li data-stage="reporting">Reporting</li><li data-stage="complete">Complete</li></ol></div>
+        <div id="brief-progress-panel" class="brief-progress" hidden><progress id="brief-progress" max="100" value="0" aria-label="Daily brief generation progress"></progress><ol class="brief-stages"><li data-stage="collecting">Collecting</li><li data-stage="evaluating">Evaluating</li><li data-stage="reporting">Reporting</li><li data-stage="complete">Complete</li></ol><p id="brief-elapsed" class="brief-elapsed" aria-live="off"></p></div>
         <p id="brief-status" role="status" aria-live="polite">Choose a date to summarise all newsletters received that day.</p>
         <div id="brief-result" hidden><div id="brief-coverage" class="eyebrow"></div><div id="brief-update-note" class="brief-update-note" hidden></div><div class="brief-result-heading"><h2>The day’s highlights</h2><span class="brief-link-hint">Open a highlight to read the article</span></div><div id="brief-text" class="brief-text"></div><details id="brief-sources"><summary>Source editions</summary><div id="brief-source-list"></div></details></div>
       </section>
@@ -60,7 +60,7 @@
       <section id="newsletter-list" class="newsletter-list" aria-label="Newsletter editions" aria-busy="false"></section>
       <div id="empty" class="empty" hidden><span class="empty-symbol" aria-hidden="true">✓</span><h2 id="empty-title">You’re caught up.</h2><p id="empty-description">Come back when there’s something new.</p><button id="clear-filters" class="button secondary" hidden>Show all newsletters</button></div>
       <button id="load-more" class="button secondary load-more" hidden>Load older editions</button>
-      <footer class="reading-footer"><span id="footer-note">Progress stays in this browser. Gmail is never changed.</span><span>Signal 1.8</span></footer>
+      <footer class="reading-footer"><span id="footer-note">Progress stays in this browser. Gmail is never changed.</span><span>Signal 1.9</span></footer>
     </main>
   </div>
   <dialog id="settings-dialog" aria-labelledby="settings-title">

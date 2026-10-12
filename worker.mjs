@@ -72,7 +72,7 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (url.pathname === '/api/config' && request.method === 'GET') return json({
-        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.8', persistentAuth: sessionConfigured(env)
+        hosted: true, clientId: env.GOOGLE_CLIENT_ID || '', label: env.NEWSLETTER_LABEL || 'AI Newsletters', version: '1.9', persistentAuth: sessionConfigured(env)
       });
       if (url.pathname.startsWith('/api/auth/')) return authRoute(request, env);
       if (url.pathname.startsWith('/api/gmail/')) return gmailRoute(request, env);
@@ -92,7 +92,15 @@ export default {
       const finish = async (signal, onProgress = () => {}) => {
         const retryHeadlines = body.retryWriting === true && stored?.generationMode === 'source-headlines';
         if (stored?.fingerprint === fingerprint && !retryHeadlines) return { ...stored, cached: true };
-        const content = await generateSummary(sources, env.AI, signal, references, onProgress);
+        // Reuse validated local-reference evaluations, scoped to the verified
+        // owner/label. Cache keys hash the complete inputs; no email body is
+        // stored. This is the existing private KV, not a new service.
+        const evaluationKey = async input => `evaluation:${identity}:${await hash(input)}`;
+        const cache = {
+          get: async input => env.REPORTS.get(await evaluationKey(input), 'json'),
+          put: async (input, candidates) => env.REPORTS.put(await evaluationKey(input), JSON.stringify(candidates), { expirationTtl: 30 * 86400 })
+        };
+        const content = await generateSummary(sources, env.AI, signal, references, onProgress, { cache });
         signal.throwIfAborted();
         onProgress({ stage: 'reporting', message: 'Saving the finished brief for your other devices…' });
         const report = { date, ...content, references, fingerprint, generatedAt: new Date().toISOString(), sources: sources.map(({ text, articles, ...metadata }) => metadata) };
@@ -126,6 +134,7 @@ export default {
 };
 function errorResponse(error) {
   if (error instanceof ApiError || error instanceof AuthError) return { message: error.message, status: error.status };
+  if (error.name === 'BriefTimeout') return { message: error.message, status: 504 };
   if (error.name === 'AbortError') return { message: 'Report cancelled. No partial report was saved.', status: 499 };
   if (/quota|neuron|limit|429|10000|daily allocation/i.test(error.message)) return { message: 'The free AI quota or processing limit was reached. Try again later; no paid fallback is used.', status: 429 };
   if (error.message?.startsWith('Choose a valid')) return { message: error.message, status: 400 };

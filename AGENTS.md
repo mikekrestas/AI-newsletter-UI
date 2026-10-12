@@ -43,6 +43,7 @@ These instructions apply throughout this repository. Keep lasting project rules 
 - Treat model output as untrusted. Validate each rewritten highlight's structure, references, length, duplicates and obvious fragments before caching. Recover complete valid stories without retaining invalid prose; on formatting failure a clearly labelled original-headline digest may use known article references. Never fabricate explanations or links to make generation succeed.
 - Preserve the explicit Retry AI writing action for headline digests. Reading a saved fallback or an unchanged successful brief must not automatically trigger AI spending.
 - Flag editions without extractable article URLs and keep them readable in Source editions. Allow quiet days with fewer or no significant highlights.
+- Preserve bounded concurrent evaluation, versioned owner-scoped evaluation caching with local-to-day article reference remapping, and the 35-second AI/40-second browser deadlines. Never turn incomplete evaluation into a saved brief. Do not start background AI on open/refresh; keep timing claims distinct from simulated benchmarks.
 - Preserve explicit quota/request limits, cache fingerprints and legacy regeneration notices. Opening a saved report must not automatically spend AI quota.
 - Structural validation does not independently fact-check news or guarantee importance judgements. Describe verification honestly.
 

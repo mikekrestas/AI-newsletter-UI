@@ -1,15 +1,15 @@
-import { newsletterName } from './sources.js?v=8';
+import { newsletterName } from './sources.js?v=9';
 export const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export class GmailError extends Error { constructor(message, status) { super(message); this.status = status; } }
 export class Gmail {
   constructor(token, persistent = false) { this.token = token; this.persistent = persistent; this.controller = new AbortController(); }
   close() { this.controller.abort(); this.token = ''; }
-  async request(path, params = {}) {
+  async request(path, params = {}, signal) {
     const url = new URL(this.persistent ? '/api/gmail/' + path : 'https://gmail.googleapis.com/gmail/v1/users/me/' + path, location.origin);
     for (const [key, value] of Object.entries(params)) {
       for (const item of Array.isArray(value) ? value : [value]) if (item !== undefined) url.searchParams.append(key, item);
     }
-    const response = await fetch(url, { headers: this.persistent ? {} : { Authorization: 'Bearer ' + this.token }, credentials: 'same-origin', cache: 'no-store', signal: this.controller.signal });
+    const response = await fetch(url, { headers: this.persistent ? {} : { Authorization: 'Bearer ' + this.token }, credentials: 'same-origin', cache: 'no-store', signal: signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal });
     if (!response.ok) {
       const errors = { 401: 'Your Gmail session expired. Connect Gmail again to continue.', 403: 'Google denied Gmail access. Check that the Gmail API is enabled and read-only permission was granted.', 429: 'Gmail is rate-limiting requests. Wait a moment and try again.' };
       throw new GmailError(errors[response.status] || 'Gmail could not load this request. Please try again.', response.status);
@@ -52,32 +52,32 @@ export class Gmail {
     if (!response.ok) throw new GmailError(result.error || 'The hosted report could not be loaded.', response.status);
     return result.report;
   }
-  async labelId(name) {
-    const result = await this.request('labels');
+  async labelId(name, signal) {
+    const result = await this.request('labels', {}, signal);
     const label = result.labels?.find(label => label.name.toLowerCase() === name.trim().toLowerCase());
     if (!label) throw new GmailError(`The Gmail label “${name}” was not found. Create it in Gmail, add some newsletters and refresh.`, 404);
     return label.id;
   }
-  async list(labelId, pageToken, query) {
-    const result = await this.request('messages', { labelIds: labelId, maxResults: 30, pageToken, q: query });
+  async list(labelId, pageToken, query, signal) {
+    const result = await this.request('messages', { labelIds: labelId, maxResults: 30, pageToken, q: query }, signal);
     return { ids: result.messages?.map(message => message.id) || [], nextPage: result.nextPageToken || null };
   }
-  async metadata(id) {
-    const message = await this.request('messages/' + encodeURIComponent(id), { format: 'metadata', metadataHeaders: ['From', 'Subject'] });
+  async metadata(id, signal) {
+    const message = await this.request('messages/' + encodeURIComponent(id), { format: 'metadata', metadataHeaders: ['From', 'Subject'] }, signal);
     const header = name => message.payload?.headers?.find(h => h.name.toLowerCase() === name)?.value || '';
     const from = header('from');
     const source = newsletterName(from, header('subject'), message.snippet || '');
     return { id: message.id, subject: header('subject') || '(Untitled edition)', source, date: Number(message.internalDate), snippet: message.snippet || '', threadId: message.threadId };
   }
-  async body(id) {
-    const message = await this.request('messages/' + encodeURIComponent(id), { format: 'full' });
+  async body(id, signal) {
+    const message = await this.request('messages/' + encodeURIComponent(id), { format: 'full' }, signal);
     const parts = [];
     function collect(part) { if (!part) return; if (!part.filename && ['text/html','text/plain'].includes(part.mimeType)) parts.push(part); for (const child of part.parts || []) collect(child); }
     collect(message.payload);
     const chosen = parts.find(part => part.mimeType === 'text/html') || parts.find(part => part.mimeType === 'text/plain');
     if (!chosen) return { content: 'This edition has no readable email body. Open the original in Gmail.', html: false, readable: false };
     let data = chosen.body?.data;
-    if (!data && chosen.body?.attachmentId) data = (await this.request(`messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(chosen.body.attachmentId)}`)).data;
+    if (!data && chosen.body?.attachmentId) data = (await this.request(`messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(chosen.body.attachmentId)}`, {}, signal)).data;
     if (!data) return { content: 'This edition is empty. Open the original in Gmail.', html: false, readable: false };
     const normal = data.replace(/-/g, '+').replace(/_/g, '/');
     const bytes = Uint8Array.from(atob(normal), char => char.charCodeAt(0));
