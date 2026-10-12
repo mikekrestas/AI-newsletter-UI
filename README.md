@@ -23,6 +23,8 @@ Only **michaelkrestas1@gmail.com** can generate or retrieve reports. The page sh
 
 ## Home Screen icon
 
+Browser tabs use the title **Signal AI** and the same navy-and-lime logo, with an SVG favicon and 16/32-pixel PNG alternatives.
+
 Signal includes an iOS Apple touch icon and a web app manifest with 192/512-pixel icons, using its navy-and-lime mark. After deploying, open the hosted app in your phone browser and choose **Share → Add to Home Screen**; the shortcut is named **Signal AI**. If you already added it, remove the old shortcut and add it again to refresh the cached icon and name. This remains a hosted web app and needs a connection for Gmail and new briefs.
 
 ## Persistent sign-in
