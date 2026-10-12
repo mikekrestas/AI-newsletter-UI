@@ -17,13 +17,13 @@ export class Gmail {
     return response.json();
   }
   async profile() { return this.request('profile'); }
-  async hostedBrief(date, sources, signal, onProgress) {
+  async hostedBrief(date, sources, signal, onProgress, retryWriting = false) {
     const response = await fetch('/api/brief' + (sources ? '' : '?date=' + encodeURIComponent(date)), {
       method: sources ? 'POST' : 'GET',
       headers: { ...(this.persistent ? {} : { Authorization: 'Bearer ' + this.token }), ...(sources ? { 'Content-Type': 'application/json' } : {}), ...(onProgress ? { Accept: 'text/event-stream' } : {}) },
       credentials: 'same-origin',
       cache: 'no-store',
-      ...(sources ? { body: JSON.stringify({ date, sources }) } : {}),
+      ...(sources ? { body: JSON.stringify({ date, sources, ...(retryWriting ? { retryWriting: true } : {}) }) } : {}),
       signal: signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal
     });
     if (response.ok && response.headers.get('Content-Type')?.includes('text/event-stream')) {

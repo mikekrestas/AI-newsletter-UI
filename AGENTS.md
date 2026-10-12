@@ -39,7 +39,9 @@ These instructions apply throughout this repository. Keep lasting project rules 
 - Keep supporting details with their parent story. Preserve caveats such as internal, unreleased or preliminary; write complete, concise explanations.
 - Each new highlight must resolve to its specific article URL from supplied references. Never invent a link or substitute an unrelated article.
 - Do not display internal A/E reference keys. Keep the entire highlight card accessible and clickable, with a green article headline and readable explanation.
-- Treat model output as untrusted. Validate structure, references, length, duplicates and obvious fragments before caching; failed repairs must not become saved reports.
+- Begin each new brief with a short overview of the selected day's themes: preferably two sentences, never more than three. Base it only on the highlights actually shown, without outside facts or weekly framing.
+- Treat model output as untrusted. Validate each rewritten highlight's structure, references, length, duplicates and obvious fragments before caching. Recover complete valid stories without retaining invalid prose; on formatting failure a clearly labelled original-headline digest may use known article references. Never fabricate explanations or links to make generation succeed.
+- Preserve the explicit Retry AI writing action for headline digests. Reading a saved fallback or an unchanged successful brief must not automatically trigger AI spending.
 - Flag editions without extractable article URLs and keep them readable in Source editions. Allow quiet days with fewer or no significant highlights.
 - Preserve explicit quota/request limits, cache fingerprints and legacy regeneration notices. Opening a saved report must not automatically spend AI quota.
 - Structural validation does not independently fact-check news or guarantee importance judgements. Describe verification honestly.
@@ -66,14 +68,16 @@ These instructions apply throughout this repository. Keep lasting project rules 
 ## Git and release workflow
 
 - Work in repository branches and create reviewable PRs; do not deliver replacement ZIPs.
-- The user reviews and merges PRs. Do not merge or deploy production unless requested. Merging GitHub code alone does not update Cloudflare.
+- The user reviews and merges PRs. Do not merge or manually deploy production unless requested. The authorised Deploy Signal workflow deploys main pushes after checks once its two Cloudflare secrets are configured; PR approval alone does not deploy.
 - Finish the implementation and checks before opening the PR. Describe the final behaviour and material verification limits.
 - Normal owner release: git pull, npm install, npm run deploy from the correct clone with its existing wrangler.json, using Node.js 22 or later.
+- For automatic releases follow DEPLOYMENT.md. Preserve the main-only/repository/event guard, test gate, credential isolation and serialised runs. Reuse the live cache/bindings, keep server variables/secrets and leave the ignored local configuration intact. Never create new resources or rotate Google/session secrets as part of a release.
 - setup:hosted and setup:session are initial activation steps, not routine release steps. Never recreate namespaces or auth secrets just to update UI code.
 
 ## Verification
 
 - For code changes run npm run check and relevant backend checks (npm run test:worker), plus browser suites appropriate to changed behaviour.
+- Changes to the deployment workflow/helper also require npm run test:deploy and a Worker dry run. Real production validation needs a successful main deployment; mocked settings and a PR check alone are not proof of a live release.
 - Browser suites import Playwright separately; PLAYWRIGHT_MODULE, CHROMIUM_PATH and READER_URL can configure the environment. Do not add Playwright to production dependencies just to run these tests.
 - Reproduce requested UI behaviour in the browser, including a narrow phone viewport. Add meaningful regression coverage for substantive bugs rather than tests that merely mirror implementation.
 - For documentation-only changes, check accuracy, links, formatting and git diff; application tests need not be repeated solely for prose edits.

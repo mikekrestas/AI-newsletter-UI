@@ -114,6 +114,12 @@ dialog.reader-dialog[open] { display: flex; align-items: center; justify-content
 .brief-result-heading h2 { font-family: Georgia, serif; font-weight: 500; font-size: 27px; margin: 0; letter-spacing: -.5px; }
 .brief-link-hint { color: var(--green); font-size: 11px; }
 .brief-text { font-size: 16px; margin: 18px 0; overflow-wrap: anywhere; }
+.brief-overview { border-left: 3px solid var(--green); padding: 16px 20px; margin: 0 0 22px; background: white; border-radius: 0 10px 10px 0; }
+.brief-overview h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--green); }
+.brief-overview p { margin: 0; line-height: 1.8; }
+.brief-overview .brief-fallback-note { margin-top: 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+#brief-date { min-width: 0; width: 100%; max-width: 100%; }
+.brief-controls > div { min-width: 0; }
 .brief-highlights { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
 .brief-item { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; border: 1px solid #e0e8d8; border-radius: 12px; padding: 18px; background: #f8faf6; }
 .brief-item.structured-highlight { display: block; padding: 0; }

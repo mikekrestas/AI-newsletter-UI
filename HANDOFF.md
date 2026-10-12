@@ -1,8 +1,35 @@
 # Signal: chat and project handoff
 
-## Current work: refresh and DAIR.AI coverage, 7 October 2026
+Original snapshot: 7 October 2026; follow-ups below dated 11/12 October. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
 
-Signal 1.8 is proposed on `codex/newsletter-refresh-coverage`, based on main commit `15e35bcc849612c228f0d51415e3b6294f319e1c` (documentation PR #6 merged). The original Signal 1.7 history below remains a dated snapshot. The 1.8 change awaits the owner's PR review/merge and normal deployment; production and the owner's actual inbox were not inspected.
+## 12 October follow-up: mobile identity and automatic deployment
+
+PR #8 remains the review branch for Signal 1.8. The owner additionally requested iOS Home Screen icons, the name Signal AI and matching browser tab identity. The PR now includes an opaque Apple touch icon, 192/512px launcher icons and a standalone manifest, matching SVG/16/32px browser favicons and Signal AI in page/iOS/manifest titles. Served metadata, image dimensions/MIME types, opaque/maskable icon geometry and Worker dry runs were checked. Existing iOS shortcuts may need removing/re-adding after deployment to update their cached name/icon. Physical iOS installation was not tested.
+
+The owner then explicitly requested automatic deployment after merging to main because they are travelling with only their phone. This supersedes the earlier manual-only release decision. The proposed Deploy Signal GitHub workflow runs main pushes/manual main dispatches after checks, serialises production runs and gives Cloudflare credentials only to the deployment step. It uses existing pinned Wrangler, with no new paid service or dependency.
+
+The owner must add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID directly to GitHub Actions repository secrets (see DEPLOYMENT.md). The helper reads the existing Worker settings, validates owner/client/bindings/secret names, reuses the live REPORTS namespace, keeps server variables and relies on Wrangler's unchanged-secret inheritance. It writes/deletes an ignored temporary config without overwriting the owner's wrangler.json or copying Google secret values. Unsupported live bindings stop deployment. Tests use simulated Cloudflare settings; actual credential readiness and a successful live automatic release still need verification after the owner's setup/main merge. PR approval alone does not release; a successful Deploy Signal run does. Manual PC deployment remains available.
+
+The agent's workspace has no active Cloudflare login or owner wrangler.json. Never ask the owner to paste the API token or Google/session secrets into chat. The GitHub connector cannot administer repository secrets; the owner uses GitHub's settings page from their phone.
+
+## 11 October follow-up: Daily Brief reliability and opening overview
+
+The owner reported that no daily brief had generated successfully. Their phone screenshot showed the Signal 1.7 error “The AI could not produce a usable report with complete stories and verified article links” at the Reporting stage. That message identifies the final draft/repair validation path; the actual live model responses were not available for inspection. The owner also requested a reader-focused opening overview: preferably one or two sentences, maximum three, describing that day's AI themes from the linked highlights below (they explicitly corrected “week” to “day”).
+
+Main was checked at 15e35bcc849612c228f0d51415e3b6294f319e1c, containing the merged documentation and Signal 1.7. Proposed Signal 1.8 changes are on codex/reliable-brief-and-day-overview; check the corresponding PR and current main/deployment before assuming it has shipped.
+
+- Recover complete stories from wrapped/token-truncated JSON, normalise cosmetic punctuation/reference brackets and validate items individually. Remove broken items or whole lower-ranked stories to meet limits instead of discarding usable news or cutting sentences.
+- Keep one bounded editorial review and retain the valid first-draft stories if its replacement is unusable. The review no longer appends the full invalid draft to a large prompt.
+- If model explanations remain unusable, show a clearly labelled digest of selected original article headlines with known article links, without fabricated details. A reference-only selection can rescue an uncited draft. Unknown/unavailable references still return an error.
+- Cache that headline digest normally, without AI spending on reads. Retry AI writing explicitly bypasses only a saved headline digest; successful unchanged briefs still use cache.
+- Add Today, at a glance above the linked highlights. Its optional prose call sees only retained highlights and is limited to three sentences/80 words. Invalid/unavailable optional prose falls back to a grounded headline overview. Cancellation and real quota/processing failures still abort without saving.
+- Keep the existing free model, owner/session protection and 36-call ceiling, reserving up to three calls for final writing/review and selection or overview. Version browser modules/styles/editorial cache to release 1.8/signal-8. Constrain the date field to its phone container.
+
+Syntax checks, 27 backend tests, the existing five Chromium suites, a new Worker-to-browser reliability suite and a Worker deployment dry run passed. Google/AI responses were mocked; the new browser test exercises the real Worker streaming/cache/validation code. Actual Cloudflare AI output and the owner's physical phone browser remain to be checked after deployment. No production deployment or auth/configuration change was made. Normal release remains merge, git pull, npm install, npm run deploy, then verify Signal 1.8 and regenerate older reports.
+
+## PR #7: refresh and DAIR.AI coverage (merged 12 October)
+
+PR #7 was merged into main at f1f8b8e05b838afbc99f8bcbabf9f518b3f9f664. At the owner's request, that main commit is merged into PR #8's branch so the refresh/DAIR changes and the brief/mobile/deployment changes release together. The owner reported adding both Cloudflare GitHub secrets; their live permissions remain to be verified by the first main deployment. Conflicts were resolved preserving both features, including metadata-only refresh and explicit headline retry. Combined checks passed: 28 Worker/auth tests, six deployment tests, seven Chromium suites and a Worker dry run. No production merge/deployment was performed by the agent. The following notes describe the original PR #7 implementation and its verification.
 
 The user reported missing DAIR.AI LinkedIn newsletters, an ineffective Refresh button, and two visible editions when four were expected on 7 October. Code inspection found reader refresh fetching only the first page, provider identification using only From, and Catch up hiding locally read/dismissed or source-filtered editions without a received-total explanation. These are demonstrated failure paths; the precise cause of each missing real email is unverified because sender/subject/label details were not supplied.
 
@@ -216,4 +243,4 @@ AGENTS.md belongs at the Git repository root beside package.json. Configure the 
 
 Suggested first message:
 
-> This is Signal, my personal free Gmail AI-newsletter app. Read AGENTS.md and HANDOFF.md, then README.md and UPGRADE.md. Use this repository as the source of truth and verify the current main/PR/deployment state because the handoff is dated. Continue via branches and reviewable PRs; I review/merge and deploy unless I explicitly ask you to do so. Preserve my existing Cloudflare configuration and working Gmail sessions. My next task is: [describe the change].
+> This is Signal, my personal free Gmail AI-newsletter app. Read AGENTS.md and HANDOFF.md, then README.md, UPGRADE.md and DEPLOYMENT.md. Use this repository as the source of truth and verify the current main/PR/deployment state because the handoff is dated. Continue via branches and reviewable PRs; I review/merge, and the configured GitHub workflow deploys main after checks. Preserve my existing Cloudflare configuration and working Gmail sessions. My next task is: [describe the change].

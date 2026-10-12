@@ -46,6 +46,7 @@ async function readJson(request) {
 }
 function validateSources(body) {
   const range = dayRange(body?.date);
+  if (body.retryWriting !== undefined && typeof body.retryWriting !== 'boolean') throw new ApiError('Invalid report retry option.');
   if (!Array.isArray(body.sources) || !body.sources.length || body.sources.length > 300) throw new ApiError('Provide 1–300 newsletters for this date.');
   const ids = new Set();
   return body.sources.map(source => {
@@ -89,7 +90,8 @@ export default {
       const fingerprint = await hash(JSON.stringify({ model: MODEL, version: SUMMARY_VERSION, sources }));
       const references = buildReferences(sources);
       const finish = async (signal, onProgress = () => {}) => {
-        if (stored?.fingerprint === fingerprint) return { ...stored, cached: true };
+        const retryHeadlines = body.retryWriting === true && stored?.generationMode === 'source-headlines';
+        if (stored?.fingerprint === fingerprint && !retryHeadlines) return { ...stored, cached: true };
         const content = await generateSummary(sources, env.AI, signal, references, onProgress);
         signal.throwIfAborted();
         onProgress({ stage: 'reporting', message: 'Saving the finished brief for your other devices…' });
@@ -127,6 +129,6 @@ function errorResponse(error) {
   if (error.name === 'AbortError') return { message: 'Report cancelled. No partial report was saved.', status: 499 };
   if (/quota|neuron|limit|429|10000|daily allocation/i.test(error.message)) return { message: 'The free AI quota or processing limit was reached. Try again later; no paid fallback is used.', status: 429 };
   if (error.message?.startsWith('Choose a valid')) return { message: error.message, status: 400 };
-  if (/No partial report|could not condense|usable report/i.test(error.message)) return { message: error.message, status: 422 };
+  if (/No partial report|could not condense|usable report|no usable article references/i.test(error.message)) return { message: error.message, status: 422 };
   return { message: 'The hosted service could not finish this request. Try again. No partial report was saved.', status: 503 };
 }

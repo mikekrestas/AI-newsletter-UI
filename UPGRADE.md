@@ -1,12 +1,24 @@
 # Update your existing hosted Signal app through Git
 
-Signal 1.8 is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+Signal is maintained in the GitHub repository. Future changes can be reviewed and merged as pull requests, then pulled into your local clone.
+
+For automatic releases after merging to main, follow [DEPLOYMENT.md](DEPLOYMENT.md). It requires only CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in GitHub Actions secrets and reuses the live Worker's configuration. Once configured, you can merge/release from your phone without the PC commands below.
 
 ## Release 1.8
 
+Daily Brief no longer rejects an entire draft because one item is badly formatted. It recovers complete JSON stories, normalises harmless wrappers/punctuation and removes invalid links/fragments individually. One editorial review retains usable stories if the replacement is malformed. Review prompts stay bounded instead of appending the whole invalid draft.
+
+If the model still cannot write usable explanations, Signal shows a clearly labelled digest of selected original newsletter headlines with their real article links. **Retry AI writing** can explicitly replace that saved headline digest; reading it makes no AI call. Unavailable article references, actual quota errors, collection failures and cancellation still stop safely.
+
+New reports open with **Today, at a glance**: preferably two sentences, maximum three and 80 words, about the day's themes drawn only from the displayed highlights. An invalid/unavailable optional overview uses a grounded headline overview rather than discarding the report. No paid model or service was added; the existing 36-call ceiling includes review/overview work.
+
+After merge, wait for the configured **Deploy Signal** workflow to succeed (or use the manual commands below), then verify **Signal 1.8** in the phone footer. Existing Google configuration, secrets and sessions need no changes. Regenerate old briefs to get the overview and updated writing pipeline. Production AI output still needs review against your real newsletters after deployment.
+
+The release also supplies a Signal Home Screen icon and the name **Signal AI** for iOS and other mobile browsers. After deploying, remove the existing Home Screen shortcut and add the hosted app again through your browser's **Share → Add to Home Screen** so iOS refreshes its cached icon and name.
+
 Refresh now loads every results page in the recent seven London-calendar days and checks saved daily-brief coverage, with explicit loading/completion feedback. Previously loaded older editions remain available. Today's received total explains read/dismissed editions and source filters, with a shortcut to the full Archive list. DAIR.AI editions sent through LinkedIn are recognised from sender/subject/preview metadata and the Top AI/ML Papers of the Week titles, consistently in the reader and daily brief input.
 
-Use the normal pull/install/deploy steps below, preserving your existing wrangler.json and secrets. Verify **Signal 1.8** in the footer. No auth setup or new KV is needed. Refresh uses no AI; regenerate an older brief if the coverage panel finds editions absent from it. Emails must still have the configured Gmail label. LinkedIn emails that contain only previews are summarised from those previews, not the full article hosted on LinkedIn.
+Use the configured automatic deployment or the manual steps below, preserving your existing configuration and secrets. Verify **Signal 1.8** in the footer. No auth setup or new KV is needed. Refresh uses no AI; regenerate an older brief if the coverage panel finds editions absent from it. Emails must still have the configured Gmail label. LinkedIn emails that contain only previews are summarised from those previews, not the full article hosted on LinkedIn.
 
 ## Release 1.7
 
@@ -59,7 +71,7 @@ npm install
 npm run deploy
 ```
 
-Refresh https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/ on your phone after deployment. GitHub changes reach the live site only after deployment; automatic Git-based Cloudflare deployment has not been configured.
+Refresh https://signal-ai-newsletters.ai-newsletter-ui.workers.dev/ on your phone after deployment. If automatic deployment is configured, wait for the **Deploy Signal** GitHub Actions run instead of running the commands above. Without its two secrets, automatic releases fail with setup guidance and manual deployment remains available.
 
 ## Daily brief coverage
 

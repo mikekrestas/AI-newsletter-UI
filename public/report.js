@@ -1,5 +1,5 @@
 import { safeUrl } from './reader.js?v=8';
-export const EDITORIAL_VERSION = 'signal-7';
+export const EDITORIAL_VERSION = 'signal-8';
 
 function visibleText(text) {
   return String(text || '').replace(/\((?:[AE]\d+[\s,;]*)+\)|\[(?:[AE]\d+[\s,;]*)+\]/g, '').replace(/\b[AE]\d+\b/g, '').replace(/\s+([.,!?])/g, '$1').replace(/\s+/g, ' ').trim();
@@ -38,6 +38,19 @@ function appendText(parent, text) {
   }
   parent.append(document.createTextNode(text.slice(cursor)));
 }
+export function renderOverview(report) {
+  if (typeof report.overview !== 'string' || !report.overview.trim()) return null;
+  const section = document.createElement('section'); section.className = 'brief-overview'; section.setAttribute('aria-label', 'The day at a glance');
+  const heading = document.createElement('h3'); heading.textContent = 'Today, at a glance';
+  const paragraph = document.createElement('p'); paragraph.textContent = visibleText(report.overview);
+  section.append(heading, paragraph);
+  if (report.generationMode === 'source-headlines') {
+    const note = document.createElement('p'); note.className = 'brief-fallback-note';
+    note.textContent = 'Showing selected original newsletter headlines because the AI could not finish its wording. Each headline still opens its source article.';
+    section.append(note);
+  }
+  return section;
+}
 export function renderReport(report, openEdition) {
   const list = document.createElement('ol'); list.className = 'brief-highlights';
   const references = new Map((Array.isArray(report.references) ? report.references : []).map(reference => [reference.key, reference]));
@@ -57,7 +70,8 @@ export function renderReport(report, openEdition) {
       const source = document.createElement('span'); source.className = 'brief-origin'; source.textContent = reference.source + ' · ' + new URL(url).hostname.replace(/^www\./, '');
       const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); icon.setAttribute('viewBox', '0 0 16 16'); icon.setAttribute('aria-hidden', 'true'); icon.classList.add('external-icon');
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', 'M5 3h8v8M13 3 3 13'); icon.append(path); source.append(icon);
-      content.append(title, detail, source); link.append(number, content); item.append(link); list.append(item);
+      content.append(title); if (detail.textContent) content.append(detail); content.append(source);
+      link.append(number, content); item.append(link); list.append(item);
     }
     if (!list.children.length) {
       const empty = document.createElement('li'); empty.className = 'brief-quiet-day';
