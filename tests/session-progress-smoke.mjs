@@ -11,7 +11,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
     const signedIn = req.headers.cookie?.includes('signal_test=1');
-    if (url.pathname === '/api/config') return json(res, { hosted: true, persistentAuth: true, version: '1.8', clientId: 'test.apps.googleusercontent.com', label: 'AI Newsletters' });
+    if (url.pathname === '/api/config') return json(res, { hosted: true, persistentAuth: true, version: '1.9', clientId: 'test.apps.googleusercontent.com', label: 'AI Newsletters' });
     if (url.pathname === '/api/auth/session') return json(res, signedIn ? { connected: true, email: 'owner@example.com' } : { connected: false }, signedIn ? 200 : 401);
     if (url.pathname === '/api/auth/login') { res.writeHead(303, { Location: '/', 'Set-Cookie': 'signal_test=1; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000' }); return res.end(); }
     if (url.pathname === '/api/auth/logout') { res.setHeader('Set-Cookie', 'signal_test=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'); return json(res, { connected: false }); }
@@ -39,7 +39,7 @@ const server = createServer(async (req, res) => {
       await emit({ type: 'progress', stage: 'evaluating', done: 3, total: 3, message: 'Compared every newsletter.' });
       await emit({ type: 'progress', stage: 'reporting', message: 'Writing the report and linking articles…' });
       while (!allowComplete && !cancelled) await pause(10); if (cancelled) return;
-      saved = { date: data.date, editorialVersion: 'signal-8', highlights: [
+      saved = { date: data.date, editorialVersion: 'signal-9', highlights: [
         { headline: 'New model API becomes available', detail: 'Developers can now test the model through a new API.', reference: 'A1' },
         { headline: 'Research improves model evaluation', detail: 'The researchers report new evidence for more useful model evaluations.', reference: 'A2' },
         { headline: 'AI tools gain a new capability', detail: 'The tools now support a practical new workflow for developers.', reference: 'A3' }
@@ -63,8 +63,8 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'owner@example.com');
   await page.locator('.edition').first().waitFor(); assert.equal(await page.locator('.edition').count(), 3);
   const modules = await page.evaluate(() => performance.getEntriesByType('resource').filter(item => /\.js(?:\?|$)/.test(item.name)).map(item => item.name));
-  assert.ok(modules.filter(url => url.startsWith(base)).every(url => url.endsWith('?v=8')));
-  assert.match(await page.locator('#footer-note + span').innerText(), /Signal 1\.8/);
+  assert.ok(modules.filter(url => url.startsWith(base)).every(url => url.endsWith('?v=9')));
+  assert.match(await page.locator('#footer-note + span').innerText(), /Signal 1\.9/);
   const filter = name => page.locator('#source-filters .filter-chip').filter({ has: page.locator('span').getByText(name, { exact: true }) });
   await filter('TLDR AI').click(); await filter('AlphaSignal').click(); await filter('DAIR.AI').click();
   const colours = await page.locator('#source-filters .filter-chip[aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)); assert.equal(new Set(colours).size, 3);
@@ -111,10 +111,27 @@ try {
   await page.locator('#brief-status').getByText(/cancelled/i).waitFor();
   assert.ok(await page.locator('#brief-progress').evaluate(node => node.value) < 100);
   await pause(400); assert.ok(cancelledStreams >= 1); assert.equal(streams, 2);
+  // Test the full mobile request deadline without waiting forty real seconds.
+  await page.clock.install();
+  await page.getByRole('button', { name: 'Generate daily brief', exact: true }).click();
+  await page.locator('.brief-stages [data-stage="evaluating"][aria-current="step"]').waitFor();
+  await page.clock.fastForward(12000);
+  assert.match(await page.locator('#brief-elapsed').innerText(), /12s elapsed/);
+  assert.equal(await page.locator('#brief-progress').evaluate(node => node.value), 25);
+  await page.clock.fastForward(29000);
+  await page.locator('#brief-status.is-error').getByText(/passed 40 seconds/).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Generate daily brief', exact: true }).isEnabled(), true);
+  assert.equal(await page.locator('#brief-result').isVisible(), false);
+  assert.equal(await page.locator('#brief-progress-panel').evaluate(node => node.classList.contains('is-stopped')), true);
+  const elapsed = await page.locator('#brief-elapsed').innerText();
+  await page.clock.fastForward(5000); assert.equal(await page.locator('#brief-elapsed').innerText(), elapsed);
+  await pause(150); assert.ok(cancelledStreams >= 2); assert.equal(streams, 3);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: (process.env.SCREENSHOT_DIR || 'test-results') + '/signal-v19-phone-timeout.png', fullPage: true });
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Not connected');
   await page.reload(); await page.getByRole('button', { name: 'Connect Gmail', exact: true }).first().waitFor();
   assert.equal(await page.locator('#connection').innerText(), 'Not connected');
   assert.deepEqual(errors, []);
-  console.log('PASS: whole cards on desktop/phone, independent Save, distinct colours, versioned assets, persistent account across reload/browser restart, cookie logout, no browser credentials, real streamed stages and cancellation.');
+  console.log('PASS: whole cards on desktop/phone, independent Save, distinct colours, versioned assets, persistent account across reload/browser restart, cookie logout, no browser credentials, real streamed stages, cancellation, elapsed time and a stopped/retryable 40-second phone deadline.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolveClose => server.close(resolveClose)); }

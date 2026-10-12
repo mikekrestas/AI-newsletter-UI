@@ -1,5 +1,5 @@
-import { safeUrl } from './reader.js?v=8';
-export const EDITORIAL_VERSION = 'signal-8';
+import { safeUrl } from './reader.js?v=9';
+export const EDITORIAL_VERSION = 'signal-9';
 
 function visibleText(text) {
   return String(text || '').replace(/\((?:[AE]\d+[\s,;]*)+\)|\[(?:[AE]\d+[\s,;]*)+\]/g, '').replace(/\b[AE]\d+\b/g, '').replace(/\s+([.,!?])/g, '$1').replace(/\s+/g, ' ').trim();

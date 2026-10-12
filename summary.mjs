@@ -1,11 +1,14 @@
+import { bounded, parallelMap } from './budget.mjs';
+
 export const MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
-export const SUMMARY_VERSION = 'signal-8';
+export const SUMMARY_VERSION = 'signal-9';
 export function buildReferences(sources) {
   const references = [], urls = new Set(); let articleNumber = 0;
   for (const [index, source] of sources.entries()) {
     references.push({ key: 'E' + (index + 1), type: 'edition', editionId: source.id, title: source.subject, source: source.source });
     for (const article of source.articles || []) {
-      if (urls.has(article.url) || articleNumber >= 300) continue;
+      if (urls.has(article.url)) continue;
+      if (articleNumber >= 300) throw new Error('This day exceeds 300 distinct article links. No partial report was created.');
       urls.add(article.url);
       references.push({ key: 'A' + (++articleNumber), type: 'article', editionId: source.id, title: article.title, url: article.url, source: source.source });
     }
@@ -127,75 +130,126 @@ function headlineOverview(highlights, unlinkedEditionCount) {
   const text = `Today’s selected headlines: ${titles.join('; ')}.${highlights.length > 2 ? ' The highlights below cover the remaining selected developments.' : ''}`;
   try { return validateOverview(text); } catch { return 'Your selected AI developments are collected below, with links to their original articles.'; }
 }
-export async function generateSummary(sources, ai, signal, references = buildReferences(sources), onProgress = () => {}) {
-  const providers = new Map();
-  let sectionCount = 0;
-  for (const source of sources) {
-    if (!providers.has(source.source)) providers.set(source.source, []);
-    for (const text of chunks(source.text)) {
-      sectionCount++;
-      providers.get(source.source).push(`Newsletter: ${source.source} — ${source.subject}\nAvailable source references:\n${referenceList(references.filter(ref => ref.editionId === source.id))}\nNewsletter text:\n${text}`);
-    }
+// Cache local article keys, not day-level keys: adding an earlier email must
+// not make a saved A1 point to a different article on the next generation.
+function evaluationResult(output, references) {
+  const objects = modelObjects(output);
+  const envelope = objects.findLast(object => Array.isArray(object.candidates));
+  const items = envelope?.candidates || objects.filter(object => Object.hasOwn(object, 'importance') && Object.hasOwn(object, 'reference'));
+  if (!envelope && !items.length) throw new Error('Cloudflare AI did not return a usable report evaluation. Retry to reuse completed evaluations.');
+  const candidates = [], seen = new Set();
+  for (const item of items) {
+    const draft = readDraft(JSON.stringify({ highlights: [item] }), references);
+    const story = draft.highlights[0];
+    if (!story || !Number.isInteger(item.importance) || item.importance < 1 || item.importance > 5) continue;
+    if (seen.has(story.reference)) continue;
+    seen.add(story.reference);
+    candidates.push({ ...story, importance: item.importance });
   }
-  if (sectionCount > 28) throw new Error('This day is too large for one free report (more than 28 text sections). No partial report was created. Narrow your newsletter label and try again.');
-  let calls = 0;
-  async function summarize(text, instruction, maxTokens = 700, candidate = false) {
-    signal?.throwIfAborted();
-    // Reserve final writing, review, then either reference-only selection or an
-    // overview. These fit within the existing total ceiling of 36 calls.
-    if (candidate && calls >= 33) throw new Error('This report exceeded the free processing limit. No partial report was created.');
-    if (++calls > 36) throw new Error('This report exceeded the free processing limit. No partial report was created.');
-    const result = await ai.run(MODEL, {
+  // An explicitly empty array is a quiet section. Broken non-empty output is
+  // not evidence that a newsletter contained no news.
+  if (items.length && !candidates.length) throw new Error('Cloudflare AI did not return a usable report evaluation. Retry to reuse completed evaluations.');
+  return candidates.sort((a, b) => b.importance - a.importance).slice(0, 4);
+}
+export async function generateSummary(sources, ai, signal, references = buildReferences(sources), onProgress = () => {}, options = {}) {
+  const started = Date.now(), totalMs = options.totalMs ?? 35000;
+  const remaining = () => totalMs - (Date.now() - started);
+  const evaluationMs = Math.min(options.evaluationMs ?? 22000, totalMs);
+  const jobs = [], providers = new Map(sources.map(source => [source.source, []]));
+  for (const source of sources) {
+    const local = buildReferences([source]);
+    for (const text of chunks(source.text, 12000)) jobs.push({ source, local, text });
+  }
+  if (sources.reduce((size, source) => size + source.text.length, 0) > 126000 || jobs.length > 28) {
+    throw new Error('This day is too large for one free report (126,000 characters or 28 evaluation sections). No partial report was created. Narrow your newsletter label and try again.');
+  }
+  let calls = 0, cacheHits = 0, evaluated = 0;
+  async function summarize(text, instruction, maxTokens = 400, active = signal, deadline = remaining()) {
+    active?.throwIfAborted();
+    if (++calls > 31) throw new Error('This report exceeded the free processing limit. No partial report was created.');
+    const result = await bounded(() => ai.run(MODEL, {
       messages: [{ role: 'system', content: instructions + selection + instruction }, { role: 'user', content: text }],
       max_tokens: maxTokens, temperature: 0.1
-    });
-    signal?.throwIfAborted();
-    if (typeof result?.response !== 'string' || (candidate && !result.response.trim()) || result.response.length > 8000) throw new Error('Cloudflare AI did not return a usable report. Try again.');
+    }), Math.min(deadline, remaining()), active);
+    active?.throwIfAborted();
+    if (typeof result?.response !== 'string' || !result.response.trim() || result.response.length > 8000) throw new Error('Cloudflare AI did not return a usable report. Try again.');
     return result.response.trim();
   }
-  // Every full section is read first. Each provider then receives the same
-  // candidate budget, so a long TLDR edition cannot crowd out a short research
-  // newsletter merely by contributing more chunks or editions.
-  const budget = Math.min(1200, Math.floor((6000 - providers.size * 110) / providers.size));
-  const candidateInstruction = ' Extract compact ranked candidates for distinct stories in this section, including near the end. For each candidate state WHO did WHAT, what changed, the evidence/caveat and why it matters. Mark importance as major, meaningful or routine; only major/meaningful candidates belong in the brief. Keep matching source keys beside each candidate, preferring the exact article A key over an edition E key. Keep statistics, experiments and follow-up sentences attached to their parent story. If a section starts/ends mid-story, do not promote that fragment into an independent candidate. Use only supplied keys. At most 200 words. No introduction or commentary.';
-  const compactInstruction = ` Consolidate this ONE provider's candidate notes into ranked news candidates, merging repeated coverage. Preserve source keys beside each retained fact. Retain independently important developments from every edition, including shorter editions. At most ${budget} characters. This is provider-level selection, before the cross-provider comparison. No introduction or commentary.`;
-  const balanced = [];
-  let evaluated = 0;
-  for (const [provider, parts] of providers) {
-    let notes = [];
-    for (const part of parts) {
-      onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Evaluating ${provider}… section ${evaluated + 1} of ${sectionCount}` });
-      notes.push(await summarize(part, candidateInstruction, 700, true)); evaluated++;
-      onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Evaluated ${evaluated} of ${sectionCount} newsletter sections` });
+  const candidateInstruction = ' EVALUATE SECTION. Return a JSON object {"candidates":[{"headline":"Specific development","detail":"One complete sentence with the essential evidence and caveat.","reference":"A1","importance":5}]}. Select at most FOUR independent major or meaningful stories from this full section, including near the end; rank them by impact. importance is an integer: 5 major, 4 substantial, 3 meaningful, 2 minor, 1 routine. Each candidate must use an exact supplied A article key, never an E edition key. Keep all details of the same experiment together. Do not turn a section boundary fragment into a story. No URLs, reference codes in visible text or Markdown. Keep each headline plus detail below 40 words and the whole response below 150 words. Return {"candidates":[]} if no linked consequential story qualifies.';
+  onProgress({ stage: 'evaluating', done: 0, total: jobs.length, message: `Evaluating ${jobs.length} sections, up to eight at a time…` });
+  const evaluatedJobs = await parallelMap(jobs, 8, signal, async (job, index, active) => {
+    const { source, local, text } = job;
+    const content = `Newsletter: ${source.source} — ${source.subject}\nAvailable source references:\n${referenceList(local, 4500)}\nNewsletter text:\n${text}`;
+    const cacheKey = JSON.stringify({ version: SUMMARY_VERSION, model: MODEL, edition: source.id, content, articles: source.articles });
+    let candidates;
+    if (options.cache) {
+      try {
+        const stored = await bounded(() => options.cache.get(cacheKey), 500, active);
+        if (stored) { candidates = evaluationResult(JSON.stringify({ candidates: stored }), local); cacheHits++; }
+      } catch (error) { active.throwIfAborted(); /* Cache outages only disable reuse. */ }
     }
-    for (let pass = 0; notes.join('\n').length > budget && pass < 4; pass++) {
-      const combined = notes.join('\n');
-      const next = [];
-      onProgress({ stage: 'evaluating', done: evaluated, total: sectionCount, message: `Comparing and consolidating ${provider} stories…` });
-      for (const part of chunks(combined)) next.push(await summarize(part, compactInstruction, Math.max(60, Math.floor(budget / 5)), true));
-      if (next.join('\n').length >= combined.length) throw new Error('The AI could not condense this day. No partial report was created.');
-      notes = next;
+    if (!candidates) {
+      const output = await summarize(content, candidateInstruction, 420, active, evaluationMs - (Date.now() - started));
+      candidates = evaluationResult(output, local);
+      if (options.cache) {
+        try { await bounded(() => options.cache.put(cacheKey, candidates), 500, active); }
+        catch (error) { active.throwIfAborted(); /* A completed evaluation is still usable. */ }
+      }
     }
-    if (notes.join('\n').length > budget) throw new Error('The AI could not condense this day. No partial report was created.');
-    balanced.push(`Provider: ${provider.slice(0, 80)}\n${notes.join('\n')}`);
+    active.throwIfAborted(); evaluated++;
+    onProgress({ stage: 'evaluating', done: evaluated, total: jobs.length, reused: cacheHits,
+      message: `Evaluated ${evaluated} of ${jobs.length} sections${cacheHits ? ` · ${cacheHits} reused` : ''}` });
+    return { source, candidates: candidates.flatMap(candidate => {
+      const localRef = local.find(ref => ref.key === candidate.reference);
+      const reference = references.find(ref => ref.type === 'article' && ref.url === localRef?.url);
+      return reference ? [{ ...candidate, reference: reference.key }] : [];
+    }) };
+  });
+  // Stable output order is independent of inference completion order. Select
+  // whole ranked candidates per provider in code: no recursive AI condensation,
+  // no mid-sentence character cuts, and the same maximum budget for each sender.
+  for (const job of evaluatedJobs) providers.get(job.source.source).push(...job.candidates);
+  const budget = Math.max(400, Math.min(1600, Math.floor(10000 / providers.size)));
+  const balanced = [], eligibleKeys = new Set(), shortlisted = [];
+  for (const [provider, candidates] of providers) {
+    const seen = new Set(); let used = 0;
+    const ranked = candidates.sort((a, b) => b.importance - a.importance).filter(candidate => {
+      if (candidate.importance < 3 || seen.has(candidate.reference)) return false;
+      const length = JSON.stringify(candidate).length;
+      if (used + length > budget) return false;
+      seen.add(candidate.reference); used += length; return true;
+    }).slice(0, 6);
+    for (const candidate of ranked) eligibleKeys.add(candidate.reference);
+    shortlisted.push(...ranked);
+    balanced.push(`Provider: ${provider.slice(0, 80)}\n${JSON.stringify(ranked)}`);
   }
-  const combined = balanced.join('\n\n');
-  // Keep the complete bounded catalogue: a candidate extractor dropping a key
-  // must not prevent the final editor from matching the actual article title.
-  const relevant = references;
-  const material = `Available source references:\n${referenceList(relevant, 7000)}\n\nEqually budgeted provider candidates:\n${combined}`;
+  const relevant = references.filter(reference => eligibleKeys.has(reference.key));
+  const material = `Available source references:\n${referenceList(relevant, 5000)}\n\nEqually budgeted provider candidates:\n${balanced.join('\n\n')}`;
+  const evaluationFinished = Date.now();
   const finalInstruction = ' Return ONLY a JSON object with this shape: {"highlights":[{"headline":"A specific, plain-language news headline","detail":"One or two complete sentences explaining the development and its consequence.","reference":"A1"}]}. Select zero to six of the biggest independent AI developments across the WHOLE day, ranked by material importance. Use fewer stories when there is little important news, and an empty array if none qualify. At most 180 words across all headlines and details. Each headline must identify the actual development; each detail must stand alone with its subject clear. Attach experiment details, numbers and caveats to the SAME story, never as an extra bullet. For example, releasing maths manuscripts and the model\u2019s test workload are one story, not two. Include unique meaningful news from other providers; do not favour the first/longest newsletter or force a provider quota. Each reference MUST be an existing A article key that actually supports that story. E edition keys are not article links and cannot be used. Never invent a URL or infer an unrelated reference. Keep all source codes exclusively in the reference field, never in visible headline/detail. No Markdown, HTML, citations, headings or evaluator commentary.';
   onProgress({ stage: 'reporting', message: 'Writing the daily report and linking its sources…' });
-  let draft = await summarize(material, finalInstruction, 1200), result = readDraft(draft, relevant);
+  let draft = '{"highlights":[]}', writingTimedOut = false;
+  try { if (eligibleKeys.size) draft = await summarize(material, finalInstruction, 750); }
+  catch (error) {
+    if (error.name !== 'BriefTimeout') throw error;
+    // Every section was evaluated before this point. If only the writer stalls,
+    // the existing labelled headline digest can use those selected real links.
+    // Never use this recovery for an incomplete evaluation or quota failure.
+    writingTimedOut = true;
+    draft = JSON.stringify({ references: shortlisted.sort((a, b) => b.importance - a.importance).map(item => item.reference) });
+  }
+  let result = readDraft(draft, relevant);
   // A lopsided first draft gets one editorial review using the same complete,
   // balanced candidates. This is not a rule to manufacture news per provider.
-  const needsCoverageReview = providers.size > 1 && citedProviders(result.highlights, references).size <= 1;
-  if (result.errors.length || result.malformed || needsCoverageReview) {
+  const needsCoverageReview = providers.size > 1 && citedProviders(result.highlights, references).size <= 1 && [...eligibleKeys].some(key => !result.highlights.some(item => item.reference === key));
+  if (!writingTimedOut && (result.errors.length || result.malformed || needsCoverageReview)) {
     onProgress({ stage: 'reporting', message: 'Checking complete stories, article links and the other newsletters…' });
     // Do not append an entire invalid draft to an already-large prompt. Review
     // the balanced facts and a compact description of the actual failure.
-    const review = await summarize(material, finalInstruction + ' EDITORIAL REVIEW: ' +
-      (result.errors.length ? 'Correct these validation failures: ' + [...new Set(result.errors)].join(' ') : result.malformed ? 'The previous response was not a complete JSON highlights object. Use the exact schema; keep all sentences complete.' : 'Re-evaluate the other providers\u2019 independent major/meaningful developments. Do not force citations for duplicate/routine news.'), 1200);
+    let review = '';
+    try { review = await summarize(material, finalInstruction + ' EDITORIAL REVIEW: ' +
+      (result.errors.length ? 'Correct these validation failures: ' + [...new Set(result.errors)].join(' ') : result.malformed ? 'The previous response was not a complete JSON highlights object. Use the exact schema; keep all sentences complete.' : 'Re-evaluate the other providers\u2019 independent major/meaningful developments. Do not force citations for duplicate/routine news.'), 850, signal, Math.min(6000, remaining()));
+    } catch (error) { if (error.name !== 'BriefTimeout') throw error; }
     const repaired = readDraft(review, relevant);
     if (repaired.highlights.length || repaired.quiet) result = repaired;
     draft += '\n' + review;
@@ -227,13 +281,13 @@ export async function generateSummary(sources, ai, signal, references = buildRef
     }
   }
   let overview = headlineOverview(highlights, unlinkedEditionCount);
-  if (highlights.length && generationMode === 'ai' && calls < 36) {
+  if (highlights.length && generationMode === 'ai' && calls < 31 && remaining() > 0) {
     onProgress({ stage: 'reporting', message: 'Writing the day’s opening overview from the selected highlights…' });
     // This call receives only the stories actually displayed, not rejected
     // candidates. Bad overview formatting must not discard a usable report.
     try {
       const prose = await summarize(JSON.stringify(highlights.map(({ headline, detail }) => ({ headline, detail }))),
-        ' Write ONLY a short opening paragraph for this personal daily brief: preferably TWO sentences, maximum THREE sentences and 80 words. Explain the main AI themes for THIS DAY and their practical significance for the reader using only the supplied highlights. Do not claim to describe the whole industry beyond these newsletters. Do not mention a week, add facts/products/numbers, citations, a heading, bullet points or JSON. Avoid hype and evaluator commentary.', 180);
+        ' Write ONLY a short opening paragraph for this personal daily brief: preferably TWO sentences, maximum THREE sentences and 80 words. Explain the main AI themes for THIS DAY and their practical significance for the reader using only the supplied highlights. Do not claim to describe the whole industry beyond these newsletters. Do not mention a week, add facts/products/numbers, citations, a heading, bullet points or JSON. Avoid hype and evaluator commentary.', 160, signal, Math.min(5000, remaining()));
       overview = validateOverview(prose);
     } catch (error) {
       // Cancellation and quota/processing stops still abort the request. A
@@ -241,6 +295,6 @@ export async function generateSummary(sources, ai, signal, references = buildRef
       if (signal?.aborted || error.name === 'AbortError' || /quota|neuron|limit|429|10000|daily allocation/i.test(error.message)) throw error;
     }
   }
-  return { overview, highlights, generationMode, editorialVersion: SUMMARY_VERSION, unlinkedEditionCount,
+  return { overview, highlights, generationMode, timings: { evaluationMs: evaluationFinished - started, totalMs: Date.now() - started, aiCalls: calls, reusedSections: cacheHits, sections: jobs.length }, editorialVersion: SUMMARY_VERSION, unlinkedEditionCount,
     summary: highlights.map(item => `* [${item.headline}](${item.reference}) ${item.detail}`).join('\n') };
 }

@@ -194,3 +194,5 @@ dialog.reader-dialog[open] { display: flex; align-items: center; justify-content
   .edition-actions .text-button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { #brief-panel[aria-busy="true"] #brief-status::before { animation: none; } }
+
+.brief-elapsed { margin: .6rem 0 0; font-size: .85rem; color: var(--muted, #5f6b7a); font-variant-numeric: tabular-nums; }

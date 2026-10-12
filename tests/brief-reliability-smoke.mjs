@@ -20,6 +20,7 @@ const env = {
   AI: { run: async (model, input) => {
     calls++; const system = input.messages[0].content;
     if (mode === 'quota') throw new Error('daily neuron quota exceeded');
+    if (system.includes('EVALUATE SECTION')) return { response: JSON.stringify({ candidates: [{ ...good, importance: 5 }] }) };
     if (system.includes('opening paragraph')) return { response: 'Today’s newsletters focus on more accessible video generation. The new controls give creators more ways to shape their output.' };
     if (mode === 'headlines') return { response: '* [Video tools](A1) The new controls are available for' };
     if (!system.includes('JSON object')) return { response: 'New video tools give creators more control (A1).' };
@@ -107,7 +108,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Generate daily brief', exact: true }).count(), 1);
   // Untrusted overview text stays literal, even when rendering a legacy record.
   const safe = await page.evaluate(async () => {
-    const { renderOverview } = await import('/report.js?v=8');
+    const { renderOverview } = await import('/report.js?v=9');
     const node = renderOverview({ overview: '<img src=x onerror=alert(1)> literal text.' });
     return { images: node.querySelectorAll('img').length, text: node.textContent, missing: renderOverview({}) };
   });

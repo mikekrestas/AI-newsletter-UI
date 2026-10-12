@@ -1,5 +1,18 @@
 # Signal: chat and project handoff
 
+## 12 October: proposed Signal 1.9 latency fix
+
+The owner reported waiting 10–15 minutes in Evaluation and requested a 30–40-second target. Main was verified at `8f2ea55` with PR #8 merged. New work is on `codex/faster-daily-brief`; verify its PR/deployment status before assuming it is live.
+
+The old pipeline awaited each 4,500-character section sequentially and repeatedly condensed provider notes, up to 36 AI calls. The new pipeline evaluates whole sections up to 12,000 characters concurrently (eight at once), parses/validates ranked candidates, and balances whole candidates in code. There are no provider-condensation calls. All sections must complete before report writing; the final editor receives only shortlisted known article references. Larger days/over 300 distinct links fail explicitly rather than dropping coverage. Bounds: 126k text characters, 28 evaluation sections, 31 calls, 512KB request and 300 editions.
+
+Validated section evaluations are cached in existing private KV for 30 days. Cache identity includes owner/label plus a hash of model/version/full content and article metadata; values contain compact validated candidate notes, not raw email bodies or credentials. Local per-edition article keys are remapped by exact URL on reuse, preserving links when new arrivals renumber the day. Cache failures disable reuse. No opening/refresh prefetch, scheduler, new service or automatic AI expenditure was added.
+
+AI work has a 35-second budget, including a 22-second evaluation deadline; the browser has a 40-second whole-request deadline. Pending Cloudflare inference cannot necessarily be remotely cancelled, but queued/replacement work stops and late output is not saved as a report. Incomplete evaluation errors retain already completed evaluation caches; a stalled final writer after complete evaluation may produce the existing clearly labelled original-headline digest. User cancellation and real quota failures still stop. Gmail collection runs in batches of eight with cancellation propagated to requests. The UI shows elapsed seconds separately from real stage progress.
+
+Verification includes mock latency/concurrency/cache/link-remapping/cancellation/timeout tests and phone timer/timeout checks. A synthetic 20-edition benchmark with five seconds per AI call completed the AI pipeline in 25.0 seconds cold (22 calls), then 15.0 seconds with one changed/19 reused evaluations (three calls). These exclude Gmail/auth/network latency and are not live Cloudflare measurements. No Cloudflare credentials are available in this workspace; real inbox quality/latency and physical Safari remain unverified. Existing model/free quotas, auth, session secrets and automatic main deployment are preserved. Syntax checks, 43 backend/deployment tests, seven Chromium suites and a Worker dry run passed. Check the PR for GitHub CI and merge/deployment status.
+
+
 Original snapshot: 7 October 2026; follow-ups below dated 11/12 October. This summarises the planning, implementation, troubleshooting and preferences from the original Codex chat. Read AGENTS.md for lasting development instructions, and verify current Git/Cloudflare state before treating this snapshot as current.
 
 ## 12 October follow-up: mobile identity and automatic deployment

@@ -138,7 +138,7 @@ try {
   assert.equal(await page.locator('#brief-result').isVisible(), false); assert.equal(summaryRequests.length, calls);
   failBody = false; delayModel = true;
   await page.locator('#generate-brief').click();
-  await page.locator('#brief-status').getByText(/Summarising all/).waitFor();
+  await page.locator('#brief-status').getByText(/Evaluating all/).waitFor();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.locator('#brief-status').getByText(/Report cancelled/).waitFor();
   assert.equal(await page.locator('#brief-result').isVisible(), false);

@@ -1,6 +1,6 @@
-import { readableContent, extractArticles } from './reader.js?v=8';
-import { dayRange, localDay } from './dates.js?v=8';
-export { localDay, dayRange } from './dates.js?v=8';
+import { readableContent, extractArticles } from './reader.js?v=9';
+import { dayRange, localDay } from './dates.js?v=9';
+export { localDay, dayRange } from './dates.js?v=9';
 
 export function newsletterText(body) {
   const fragment = readableContent(body.content, body.html);
@@ -36,7 +36,7 @@ export async function collectMetadata(api, label, range, signal, onProgress = ()
   const ids = new Set(), pages = new Set(); let pageToken;
   do {
     signal.throwIfAborted();
-    const page = await api.list(label, pageToken, range.query);
+    const page = await api.list(label, pageToken, range.query, signal);
     for (const id of page.ids) ids.add(id);
     if (ids.size > limit) throw new Error(`This period has more than ${limit} emails. Narrow your Gmail newsletter label and try again. No partial collection was used.`);
     pageToken = page.nextPage;
@@ -45,10 +45,10 @@ export async function collectMetadata(api, label, range, signal, onProgress = ()
     onProgress(`Finding all newsletters… ${ids.size} found`);
   } while (pageToken);
   const result = []; const all = [...ids];
-  for (let i = 0; i < all.length; i += 3) {
+  for (let i = 0; i < all.length; i += 8) {
     signal.throwIfAborted();
-    const group = await Promise.all(all.slice(i, i + 3).map(async id => {
-      const edition = await api.metadata(id);
+    const group = await Promise.all(all.slice(i, i + 8).map(async id => {
+      const edition = await api.metadata(id, signal);
       if (edition.date < range.start || edition.date >= range.end) return null;
       return edition;
     }));
@@ -75,18 +75,18 @@ export async function collectDay(api, label, date, signal, onProgress = () => {}
   onStage({ stage: 'collecting', done: 0, total: 1, message: 'Finding every newsletter for this date…' });
   const editions = await collectDayMetadata(api, label, date, signal, onProgress);
   const result = [];
-  for (let i = 0; i < editions.length; i += 3) {
+  for (let i = 0; i < editions.length; i += 8) {
     signal.throwIfAborted();
-    const group = await Promise.all(editions.slice(i, i + 3).map(async edition => {
-      const body = await api.body(edition.id);
+    const group = await Promise.all(editions.slice(i, i + 8).map(async edition => {
+      const body = await api.body(edition.id, signal);
       if (body.readable === false) throw new Error(`“${edition.subject}” has no readable email body. No partial report was created.`);
       const text = newsletterText(body);
       if (!text.trim()) throw new Error(`“${edition.subject}” has no readable text. The report was stopped so it would not silently omit an edition.`);
       return { ...edition, text, articles: extractArticles(body) };
     }));
     result.push(...group.filter(Boolean));
-    onProgress(`Reading full newsletters… ${Math.min(i + 3, editions.length)} of ${editions.length}`);
-    onStage({ stage: 'collecting', done: Math.min(i + 3, editions.length), total: editions.length, message: `Collecting full emails… ${Math.min(i + 3, editions.length)} of ${editions.length}` });
+    onProgress(`Reading full newsletters… ${Math.min(i + 8, editions.length)} of ${editions.length}`);
+    onStage({ stage: 'collecting', done: Math.min(i + 8, editions.length), total: editions.length, message: `Collecting full emails… ${Math.min(i + 8, editions.length)} of ${editions.length}` });
   }
   signal.throwIfAborted();
   return result.sort((a, b) => a.date - b.date);
