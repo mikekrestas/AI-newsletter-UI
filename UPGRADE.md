@@ -12,6 +12,8 @@ New reports open with **Today, at a glance**: preferably two sentences, maximum 
 
 After merge, run the normal pull/install/deploy commands below and verify **Signal 1.8** in the phone footer. Existing Google configuration, secrets and sessions need no changes. Regenerate old briefs to get the overview and updated writing pipeline. Production AI output still needs review against your real newsletters after deployment.
 
+The release also supplies a Signal Home Screen icon for iOS and other mobile browsers. After deploying, remove the existing Home Screen shortcut and add the hosted app again through your browser's **Share → Add to Home Screen** so iOS refreshes its cached icon.
+
 ## Release 1.7
 
 Daily briefs now contain complete, ranked stories with a direct article URL on every new highlight. Whole highlight cards open the article, and internal citation keys are hidden. The editor prioritises material releases, research and policy/tool changes; supporting statistics stay with their story rather than becoming filler bullets. The server validates structured output and allows one repair before refusing an incomplete report. News without an extractable article link is flagged instead of receiving an invented or unrelated URL.

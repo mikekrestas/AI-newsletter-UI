@@ -21,6 +21,10 @@ Already deployed? Follow [UPGRADE.md](UPGRADE.md) to move to Git updates while p
 
 Only **michaelkrestas1@gmail.com** can generate or retrieve reports. The page shell and fictional demo are public; your Gmail and saved reports require an authenticated owner session or the temporary Google access token. Sign in through Safari/Chrome directly rather than an embedded browser inside another app. If Google sign-in is blocked, allow popups for this website.
 
+## Home Screen icon
+
+Signal includes an iOS Apple touch icon and a web app manifest with 192/512-pixel icons, using its navy-and-lime mark. After deploying, open the hosted app in your phone browser and choose **Share → Add to Home Screen**; the shortcut is named **Signal**. If you already added it, remove the old shortcut and add it again to refresh the cached icon. This remains a hosted web app and needs a connection for Gmail and new briefs.
+
 ## Persistent sign-in
 
 Signal 1.6 can restore your Gmail account after refreshing, closing a tab or restarting the browser. Gmail access is refreshed on the server, with access/refresh tokens encrypted using AES-GCM in the existing private KV. The browser gets a Secure, HttpOnly, SameSite=Lax session cookie; JavaScript and local storage never receive those credentials. Disconnect deletes that browser's server session and cookie while leaving other devices connected.
