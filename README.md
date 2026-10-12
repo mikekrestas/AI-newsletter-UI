@@ -23,7 +23,7 @@ Only **michaelkrestas1@gmail.com** can generate or retrieve reports. The page sh
 
 ## Home Screen icon
 
-Signal includes an iOS Apple touch icon and a web app manifest with 192/512-pixel icons, using its navy-and-lime mark. After deploying, open the hosted app in your phone browser and choose **Share → Add to Home Screen**; the shortcut is named **Signal**. If you already added it, remove the old shortcut and add it again to refresh the cached icon. This remains a hosted web app and needs a connection for Gmail and new briefs.
+Signal includes an iOS Apple touch icon and a web app manifest with 192/512-pixel icons, using its navy-and-lime mark. After deploying, open the hosted app in your phone browser and choose **Share → Add to Home Screen**; the shortcut is named **Signal AI**. If you already added it, remove the old shortcut and add it again to refresh the cached icon and name. This remains a hosted web app and needs a connection for Gmail and new briefs.
 
 ## Persistent sign-in
 

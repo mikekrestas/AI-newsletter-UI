@@ -12,7 +12,7 @@ New reports open with **Today, at a glance**: preferably two sentences, maximum 
 
 After merge, run the normal pull/install/deploy commands below and verify **Signal 1.8** in the phone footer. Existing Google configuration, secrets and sessions need no changes. Regenerate old briefs to get the overview and updated writing pipeline. Production AI output still needs review against your real newsletters after deployment.
 
-The release also supplies a Signal Home Screen icon for iOS and other mobile browsers. After deploying, remove the existing Home Screen shortcut and add the hosted app again through your browser's **Share → Add to Home Screen** so iOS refreshes its cached icon.
+The release also supplies a Signal Home Screen icon and the name **Signal AI** for iOS and other mobile browsers. After deploying, remove the existing Home Screen shortcut and add the hosted app again through your browser's **Share → Add to Home Screen** so iOS refreshes its cached icon and name.
 
 ## Release 1.7
 

@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Signal — AI newsletters",
-  "short_name": "Signal",
+  "name": "Signal AI",
+  "short_name": "Signal AI",
   "description": "Your personal AI newsletters and daily brief.",
   "start_url": "/",
   "scope": "/",
